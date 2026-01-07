@@ -8,8 +8,11 @@
 #include <Controls/CheckBox.mqh>
 #include <Controls/Edit.mqh>
 #include <Controls/Scrolls.mqh>
+#include "LongShortMetrics.mqh"
 
 void UpdateCotacoesGrid();
+void UpdatePairsGrid();
+void UpdatePairsDetailGrid();
 
 class CQuotesScrollV : public CScrollV
 {
@@ -22,7 +25,39 @@ protected:
    virtual bool OnThumbDragProcess(void)
      {
       CScrollV::OnThumbDragProcess();
-      UpdateCotacoesGrid();
+     UpdateCotacoesGrid();
+     return(true);
+    }
+};
+
+class CPairsScrollV : public CScrollV
+{
+protected:
+   virtual bool OnChangePos(void)
+     {
+      UpdatePairsGrid();
+      return(true);
+     }
+   virtual bool OnThumbDragProcess(void)
+     {
+      CScrollV::OnThumbDragProcess();
+      UpdatePairsGrid();
+     return(true);
+     }
+};
+
+class CPairsDetailScrollV : public CScrollV
+{
+protected:
+   virtual bool OnChangePos(void)
+     {
+      UpdatePairsDetailGrid();
+      return(true);
+     }
+   virtual bool OnThumbDragProcess(void)
+     {
+      CScrollV::OnThumbDragProcess();
+      UpdatePairsDetailGrid();
       return(true);
      }
 };
@@ -31,6 +66,7 @@ CAppDialog g_app;
 CPanel     g_left;
 #define TAB_COUNT 8
 #define ACTIONS_TAB 1
+#define PARES_TAB 2
 #define COTACOES_TAB 3
 #define CONFIG_TAB 6
 CButton    g_tabs[TAB_COUNT];
@@ -88,6 +124,49 @@ color     g_quotes_header_bg = (color)0xE6E6E6;
 color     g_quotes_row_bg_a = (color)0xFFFFFF;
 color     g_quotes_row_bg_b = (color)0xF5F5F5;
 color     g_quotes_border = (color)0xD0D0D0;
+
+#define PAIRS_COLS 9
+#define PAIRS_DETAIL_COLS 8
+
+CButton   g_pairs_scan_btn;
+CLabel    g_pairs_status;
+CEdit     g_pairs_headers[];
+CEdit     g_pairs_cells[];
+CLabel    g_pairs_empty;
+CPairsScrollV g_pairs_scroll;
+int       g_pairs_rows = 200;
+int       g_pairs_row_h = 16;
+int       g_pairs_row_gap = 2;
+int       g_pairs_x = 0;
+int       g_pairs_y = 0;
+int       g_pairs_w = 0;
+int       g_pairs_h = 0;
+int       g_pairs_visible_rows = 0;
+int       g_pairs_scroll_pos = 0;
+int       g_pairs_scroll_w = 14;
+int       g_pairs_data_y = 0;
+int       g_pairs_col_w[PAIRS_COLS];
+color     g_pairs_header_bg = (color)0xE6E6E6;
+color     g_pairs_row_bg_a = (color)0xFFFFFF;
+color     g_pairs_row_bg_b = (color)0xF5F5F5;
+color     g_pairs_border = (color)0xD0D0D0;
+
+CEdit     g_pairs_detail_headers[];
+CEdit     g_pairs_detail_cells[];
+CLabel    g_pairs_detail_empty;
+CPairsDetailScrollV g_pairs_detail_scroll;
+int       g_pairs_detail_row_h = 16;
+int       g_pairs_detail_row_gap = 2;
+int       g_pairs_detail_x = 0;
+int       g_pairs_detail_y = 0;
+int       g_pairs_detail_w = 0;
+int       g_pairs_detail_h = 0;
+int       g_pairs_detail_visible_rows = 0;
+int       g_pairs_detail_scroll_pos = 0;
+int       g_pairs_detail_scroll_w = 14;
+int       g_pairs_detail_data_y = 0;
+int       g_pairs_detail_col_w[PAIRS_DETAIL_COLS];
+
 CLabel    g_cfg_title;
 CLabel    g_cfg_base_label;
 CEdit     g_cfg_base_input;
@@ -108,6 +187,8 @@ CLabel    g_cfg_half_label;
 CEdit     g_cfg_half_input;
 CLabel    g_cfg_half_help;
 CLabel    g_cfg_half_help2;
+
+#include "LongShortPairsScan.mqh"
 
 
 
@@ -267,19 +348,13 @@ bool InitAcoesTab(const int x, const int y, const int w, const int h)
    return(true);
 }
 
-int BuildSelectedSymbols()
+// Single source of truth for the selected symbols (from "Acoes"/"Cotacoes" selection).
+int GetSelectedSymbols(string &out[])
 {
-   int count = 0;
-   ArrayResize(g_selected_symbols, 0);
-   for(int i = 0; i < g_action_total; i++)
-     {
-      if(g_action_checks[i].Checked())
-        {
-         ArrayResize(g_selected_symbols, count + 1);
-         g_selected_symbols[count] = g_action_symbols[i];
-         count++;
-        }
-     }
+   const int count = BuildSelectedSymbols();
+   ArrayResize(out, count);
+   for(int i = 0; i < count; i++)
+      out[i] = g_selected_symbols[i];
    return(count);
 }
 
@@ -337,6 +412,7 @@ int BuildFilteredSymbols()
    return(ArraySize(g_filtered_symbols));
 }
 
+
 int GetSortedIndex(const int data_pos, const int total)
 {
    if(total <= 0)
@@ -371,6 +447,30 @@ void SetCotacoesVisible(const bool flag)
    for(int i = 0; i < ArraySize(g_quotes_cells); i++)
       g_quotes_cells[i].Visible(flag);
 }
+
+void SetParesVisible(const bool flag)
+{
+   g_pairs_scan_btn.Visible(flag);
+   g_pairs_status.Visible(flag);
+   g_pairs_empty.Visible(flag);
+   g_pairs_scroll.Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_headers); i++)
+      g_pairs_headers[i].Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_cells); i++)
+      g_pairs_cells[i].Visible(flag);
+   g_pairs_detail_empty.Visible(flag);
+   g_pairs_detail_scroll.Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_detail_headers); i++)
+      g_pairs_detail_headers[i].Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_detail_cells); i++)
+      g_pairs_detail_cells[i].Visible(flag);
+}
+
+void UpdatePairsGrid()
+{
+   FillMainGrid();
+}
+
 void SetConfigVisible(const bool flag)
 {
    g_cfg_title.Visible(flag);
@@ -507,9 +607,220 @@ void UpdateCotacoesGrid()
          else
             g_quotes_cells[idx].Text("");
          g_quotes_cells[idx].ColorBackground((data_index % 2 == 0) ? g_quotes_row_bg_a : g_quotes_row_bg_b);
-         g_quotes_cells[idx].Visible(true);
+      g_quotes_cells[idx].Visible(true);
+     }
+   }
+}
+
+void BuildPairScanConfig(PairScanConfig &cfg)
+{
+   cfg.base_window = ParseIntText(g_cfg_base_input.Text(), 180);
+   cfg.corr_min = ParseDoubleText(g_cfg_corr_input.Text(), 0.75);
+   cfg.z_min = ParseDoubleText(g_cfg_z_input.Text(), 0.0);
+   cfg.adf_min = ParseDoubleText(g_cfg_adf_input.Text(), 0.0);
+   cfg.half_max = ParseDoubleText(g_cfg_half_input.Text(), 0.0);
+   cfg.beta_window = ParseIntText(g_cfg_beta_input.Text(), 0);
+   cfg.windows_total = ParseWindowsList(g_cfg_windows_input.Text(), cfg.windows);
+}
+
+void ScanPairs()
+{
+   string symbols[];
+   const int symbols_total = GetSelectedSymbols(symbols);
+   PairScanConfig cfg;
+   BuildPairScanConfig(cfg);
+
+   if(ScanPairsBaseWindow(symbols, symbols_total, cfg, 60))
+      EventSetTimer(1);
+}
+
+bool InitParesTab(const int x, const int y, const int w, const int h)
+{
+   const int header_h = 18;
+   const int top_pad = 8;
+   const int y_top = y + top_pad;
+   const int left = x + 12;
+   const int right = x + w - 12;
+   const int btn_w = 110;
+   const int btn_h = 24;
+
+   if(!g_pairs_scan_btn.Create(0, "pairs_scan_btn", 0, left, y_top, left + btn_w, y_top + btn_h))
+      return(false);
+   g_pairs_scan_btn.Text("Scanear");
+   g_app.Add(g_pairs_scan_btn);
+
+   if(!g_pairs_status.Create(0, "pairs_status", 0, left + btn_w + 10, y_top, right, y_top + btn_h))
+      return(false);
+   g_pairs_status.Text("");
+   g_pairs_status.ColorBackground(clrWhite);
+   g_pairs_status.ColorBorder(clrWhite);
+   g_app.Add(g_pairs_status);
+
+   g_pairs_x = left;
+   g_pairs_y = y_top + btn_h + 10;
+   const int available_h = h - (g_pairs_y - y) - 12;
+   const int grids_gap = 12;
+   int main_h = (int)(available_h * 0.6);
+   int detail_h = available_h - main_h - grids_gap;
+   if(detail_h < 80)
+     {
+      detail_h = 80;
+      main_h = available_h - detail_h - grids_gap;
+      if(main_h < 80)
+         main_h = 80;
+     }
+   g_pairs_w = w - 24 - g_pairs_scroll_w - 4;
+   g_pairs_h = main_h;
+   g_pairs_visible_rows = (g_pairs_h - header_h - 6) / (g_pairs_row_h + g_pairs_row_gap);
+   if(g_pairs_visible_rows < 1)
+      g_pairs_visible_rows = 1;
+   g_pairs_data_y = g_pairs_y + header_h + 6;
+
+   const int default_w[PAIRS_COLS] = {140, 60, 70, 60, 60, 60, 60, 70, 60};
+   int sum_w = 0;
+   for(int i = 0; i < PAIRS_COLS; i++)
+      sum_w += default_w[i];
+   for(int i = 0; i < PAIRS_COLS; i++)
+      g_pairs_col_w[i] = default_w[i];
+   if(sum_w < g_pairs_w)
+      g_pairs_col_w[PAIRS_COLS - 1] += (g_pairs_w - sum_w);
+
+   string col_names[PAIRS_COLS] = {"Par", "Corr", "Score", "Beta", "Z", "Half", "ADF", "Status", "Janela"};
+   ArrayResize(g_pairs_headers, PAIRS_COLS);
+   int x_cursor = g_pairs_x;
+   for(int i = 0; i < PAIRS_COLS; i++)
+     {
+      const int x1 = x_cursor;
+      const int x2 = x1 + g_pairs_col_w[i] - 2;
+      const string name = "pairs_hdr_" + IntegerToString(i);
+      if(!g_pairs_headers[i].Create(0, name, 0, x1, g_pairs_y, x2, g_pairs_y + header_h))
+         return(false);
+      g_pairs_headers[i].Text(col_names[i]);
+      g_pairs_headers[i].ColorBackground(g_pairs_header_bg);
+      g_pairs_headers[i].ColorBorder(g_pairs_border);
+      g_pairs_headers[i].ReadOnly(true);
+      g_app.Add(g_pairs_headers[i]);
+      x_cursor += g_pairs_col_w[i];
+     }
+
+   ArrayResize(g_pairs_cells, g_pairs_visible_rows * PAIRS_COLS);
+   for(int row = 0; row < g_pairs_visible_rows; row++)
+     {
+      const int y1 = g_pairs_data_y + row * (g_pairs_row_h + g_pairs_row_gap);
+      const int y2 = y1 + g_pairs_row_h;
+      int cell_x = g_pairs_x;
+      for(int col = 0; col < PAIRS_COLS; col++)
+        {
+         const int x1 = cell_x;
+         const int x2 = x1 + g_pairs_col_w[col] - 2;
+         const int idx = row * PAIRS_COLS + col;
+         if(!g_pairs_cells[idx].Create(0, "pairs_cell_" + IntegerToString(idx), 0, x1, y1, x2, y2))
+            return(false);
+         g_pairs_cells[idx].Text("");
+         g_pairs_cells[idx].ColorBackground((row % 2 == 0) ? g_pairs_row_bg_a : g_pairs_row_bg_b);
+         g_pairs_cells[idx].ColorBorder(g_pairs_border);
+         g_pairs_cells[idx].ReadOnly(true);
+         g_app.Add(g_pairs_cells[idx]);
+         cell_x += g_pairs_col_w[col];
         }
      }
+
+   const int scroll_x1 = x + w - 12 - g_pairs_scroll_w;
+   const int scroll_y1 = g_pairs_data_y;
+   const int scroll_x2 = scroll_x1 + g_pairs_scroll_w;
+   const int scroll_y2 = g_pairs_data_y + g_pairs_visible_rows * (g_pairs_row_h + g_pairs_row_gap) - g_pairs_row_gap;
+   if(!g_pairs_scroll.Create(0, "pairs_scroll", 0, scroll_x1, scroll_y1, scroll_x2, scroll_y2))
+      return(false);
+   g_pairs_scroll.MinPos(0);
+   g_pairs_scroll.MaxPos(0);
+   g_pairs_scroll.CurrPos(0);
+   g_app.Add(g_pairs_scroll);
+
+   if(!g_pairs_empty.Create(0, "pairs_empty", 0, g_pairs_x, g_pairs_y + header_h + 6, g_pairs_x + g_pairs_w, g_pairs_y + header_h + 24))
+      return(false);
+   g_pairs_empty.Text("");
+   g_pairs_empty.ColorBackground(clrWhite);
+   g_pairs_empty.ColorBorder(clrWhite);
+   g_app.Add(g_pairs_empty);
+
+   g_pairs_detail_x = g_pairs_x;
+   g_pairs_detail_y = g_pairs_y + g_pairs_h + grids_gap;
+   g_pairs_detail_w = g_pairs_w;
+   g_pairs_detail_h = detail_h;
+   g_pairs_detail_visible_rows = (g_pairs_detail_h - header_h - 6) / (g_pairs_detail_row_h + g_pairs_detail_row_gap);
+   if(g_pairs_detail_visible_rows < 1)
+      g_pairs_detail_visible_rows = 1;
+   g_pairs_detail_data_y = g_pairs_detail_y + header_h + 6;
+
+   const int detail_default_w[PAIRS_DETAIL_COLS] = {70, 60, 70, 60, 60, 60, 60, 70};
+   int detail_sum = 0;
+   for(int i = 0; i < PAIRS_DETAIL_COLS; i++)
+      detail_sum += detail_default_w[i];
+   for(int i = 0; i < PAIRS_DETAIL_COLS; i++)
+      g_pairs_detail_col_w[i] = detail_default_w[i];
+   if(detail_sum < g_pairs_detail_w)
+      g_pairs_detail_col_w[PAIRS_DETAIL_COLS - 1] += (g_pairs_detail_w - detail_sum);
+
+   string detail_cols[PAIRS_DETAIL_COLS] = {"Janela", "Corr", "Score", "Beta", "Z", "Half", "ADF", "Status"};
+   ArrayResize(g_pairs_detail_headers, PAIRS_DETAIL_COLS);
+   x_cursor = g_pairs_detail_x;
+   for(int i = 0; i < PAIRS_DETAIL_COLS; i++)
+     {
+      const int x1 = x_cursor;
+      const int x2 = x1 + g_pairs_detail_col_w[i] - 2;
+      const string name = "pairs_detail_hdr_" + IntegerToString(i);
+      if(!g_pairs_detail_headers[i].Create(0, name, 0, x1, g_pairs_detail_y, x2, g_pairs_detail_y + header_h))
+         return(false);
+      g_pairs_detail_headers[i].Text(detail_cols[i]);
+      g_pairs_detail_headers[i].ColorBackground(g_pairs_header_bg);
+      g_pairs_detail_headers[i].ColorBorder(g_pairs_border);
+      g_pairs_detail_headers[i].ReadOnly(true);
+      g_app.Add(g_pairs_detail_headers[i]);
+      x_cursor += g_pairs_detail_col_w[i];
+     }
+
+   ArrayResize(g_pairs_detail_cells, g_pairs_detail_visible_rows * PAIRS_DETAIL_COLS);
+   for(int row = 0; row < g_pairs_detail_visible_rows; row++)
+     {
+      const int y1 = g_pairs_detail_data_y + row * (g_pairs_detail_row_h + g_pairs_detail_row_gap);
+      const int y2 = y1 + g_pairs_detail_row_h;
+      int cell_x = g_pairs_detail_x;
+      for(int col = 0; col < PAIRS_DETAIL_COLS; col++)
+        {
+         const int x1 = cell_x;
+         const int x2 = x1 + g_pairs_detail_col_w[col] - 2;
+         const int idx = row * PAIRS_DETAIL_COLS + col;
+         if(!g_pairs_detail_cells[idx].Create(0, "pairs_detail_cell_" + IntegerToString(idx), 0, x1, y1, x2, y2))
+            return(false);
+         g_pairs_detail_cells[idx].Text("");
+         g_pairs_detail_cells[idx].ColorBackground((row % 2 == 0) ? g_pairs_row_bg_a : g_pairs_row_bg_b);
+         g_pairs_detail_cells[idx].ColorBorder(g_pairs_border);
+         g_pairs_detail_cells[idx].ReadOnly(true);
+         g_app.Add(g_pairs_detail_cells[idx]);
+         cell_x += g_pairs_detail_col_w[col];
+        }
+     }
+
+   const int detail_scroll_x1 = x + w - 12 - g_pairs_detail_scroll_w;
+   const int detail_scroll_y1 = g_pairs_detail_data_y;
+   const int detail_scroll_x2 = detail_scroll_x1 + g_pairs_detail_scroll_w;
+   const int detail_scroll_y2 = g_pairs_detail_data_y + g_pairs_detail_visible_rows * (g_pairs_detail_row_h + g_pairs_detail_row_gap) - g_pairs_detail_row_gap;
+   if(!g_pairs_detail_scroll.Create(0, "pairs_detail_scroll", 0, detail_scroll_x1, detail_scroll_y1, detail_scroll_x2, detail_scroll_y2))
+      return(false);
+   g_pairs_detail_scroll.MinPos(0);
+   g_pairs_detail_scroll.MaxPos(0);
+   g_pairs_detail_scroll.CurrPos(0);
+   g_app.Add(g_pairs_detail_scroll);
+
+   if(!g_pairs_detail_empty.Create(0, "pairs_detail_empty", 0, g_pairs_detail_x, g_pairs_detail_y + header_h + 6, g_pairs_detail_x + g_pairs_detail_w, g_pairs_detail_y + header_h + 24))
+      return(false);
+   g_pairs_detail_empty.Text("");
+   g_pairs_detail_empty.ColorBackground(clrWhite);
+   g_pairs_detail_empty.ColorBorder(clrWhite);
+   g_app.Add(g_pairs_detail_empty);
+
+   SetParesVisible(false);
+   return(true);
 }
 
 bool InitCotacoesTab(const int x, const int y, const int w, const int h)
@@ -853,6 +1164,7 @@ void SwitchTab(const int index)
    for(int i = 0; i < TAB_COUNT; i++)
       g_pages[i].Visible(i == index);
    SetAcoesVisible(index == ACTIONS_TAB);
+   SetParesVisible(index == PARES_TAB);
    SetConfigVisible(index == CONFIG_TAB);
    if(index == COTACOES_TAB)
      {
@@ -862,6 +1174,11 @@ void SwitchTab(const int index)
    else
      {
       SetCotacoesVisible(false);
+     }
+   if(index == PARES_TAB)
+     {
+      UpdatePairsGrid();
+      UpdatePairsDetailGrid();
      }
 }
 
@@ -901,6 +1218,8 @@ int OnInit()
      }
    if(!InitAcoesTab(content_x, content_y, content_w, content_h))
       return(INIT_FAILED);
+   if(!InitParesTab(content_x, content_y, content_w, content_h))
+      return(INIT_FAILED);
    if(!InitCotacoesTab(content_x, content_y, content_w, content_h))
       return(INIT_FAILED);
    if(!InitConfigTab(content_x, content_y, content_w, content_h))
@@ -937,6 +1256,12 @@ void OnDeinit(const int reason)
    g_app.Destroy(reason);
 }
 
+void OnTimer()
+{
+   if(ProcessPairsScanBatch())
+      EventKillTimer();
+}
+
 void OnChartEvent(const int id, const long& l, const double& d, const string& s)
 {
    if(id == CHARTEVENT_CHART_CHANGE)
@@ -947,7 +1272,21 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
      }
    if(id == CHARTEVENT_OBJECT_CLICK)
      {
-      if(s == "cot_btn_prev")
+      if(s == "pairs_scan_btn")
+        {
+         ScanPairs();
+        }
+      else if(StringFind(s, "pairs_cell_") == 0)
+        {
+         const int prefix_len = StringLen("pairs_cell_");
+         const int idx = (int)StringToInteger(StringSubstr(s, prefix_len));
+         const int row = idx / PAIRS_COLS;
+         const int data_index = g_pairs_scroll_pos + row;
+         PairScanConfig cfg;
+         BuildPairScanConfig(cfg);
+         FillDetailGridForSelectedPair(data_index, cfg);
+        }
+      else if(s == "cot_btn_prev")
         {
          if(g_quotes_page > 0)
             g_quotes_page--;
