@@ -120,9 +120,25 @@ bool CalcBetaOLS(const double &prices_a[], const double &prices_b[], const int p
 
 bool CalcZScore(const double &spread[], const int spread_count, const int window, double &zscore)
 {
-   // TODO: implement z-score on spread.
-   zscore = 0.0;
-   return(false);
+   if(window < 2 || spread_count < window)
+      return(false);
+   double mean = 0.0;
+   for(int i = 0; i < window; i++)
+      mean += spread[i];
+   mean /= window;
+
+   double var = 0.0;
+   for(int i = 0; i < window; i++)
+     {
+      const double d = spread[i] - mean;
+      var += d * d;
+     }
+   var /= window;
+   if(var <= 0.0)
+      return(false);
+   const double std = MathSqrt(var);
+   zscore = (spread[0] - mean) / std;
+   return(true);
 }
 
 bool CalcHalfLife(const double &spread[], const int spread_count, double &half_life)
