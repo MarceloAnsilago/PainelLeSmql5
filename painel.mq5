@@ -95,6 +95,8 @@ CLabel    g_cfg_windows_label;
 CEdit     g_cfg_windows_input;
 CLabel    g_cfg_windows_help;
 CLabel    g_cfg_windows_current;
+CLabel    g_cfg_corr_label;
+CEdit     g_cfg_corr_input;
 CLabel    g_cfg_adf_label;
 CEdit     g_cfg_adf_input;
 CLabel    g_cfg_z_label;
@@ -378,6 +380,8 @@ void SetConfigVisible(const bool flag)
    g_cfg_windows_input.Visible(flag);
    g_cfg_windows_help.Visible(flag);
    g_cfg_windows_current.Visible(flag);
+   g_cfg_corr_label.Visible(flag);
+   g_cfg_corr_input.Visible(flag);
    g_cfg_adf_label.Visible(flag);
    g_cfg_adf_input.Visible(flag);
    g_cfg_z_label.Visible(flag);
@@ -736,6 +740,22 @@ bool InitConfigTab(const int x, const int y, const int w, const int h)
    g_app.Add(g_cfg_windows_current);
 
    y_cursor += label_h + 12;
+
+   if(!g_cfg_corr_label.Create(0, "cfg_corr_lbl", 0, left_x, y_cursor, left_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_corr_label.Text("Correlacao minima");
+   g_cfg_corr_label.ColorBackground(clrWhite);
+   g_cfg_corr_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_corr_label);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_corr_input.Create(0, "cfg_corr", 0, left_x, y_cursor, left_x + col_w, y_cursor + input_h))
+      return(false);
+   g_cfg_corr_input.Text("0.75");
+   g_app.Add(g_cfg_corr_input);
+
+   y_cursor += input_h + 12;
 
    const int col3_w = (w - 24 - (col_gap * 2)) / 3;
    const int col1_x = left;
