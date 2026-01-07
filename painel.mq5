@@ -771,17 +771,18 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_y = y_top + btn_h + 10;
    const int available_h = h - (g_pairs_y - y) - 12;
    const int grids_gap = 12;
-   int main_h = (int)(available_h * 0.6);
-   int detail_h = available_h - main_h - grids_gap;
-   if(detail_h < 80)
+   const int available_w = w - 24;
+   int left_w = (int)(available_w * 0.5);
+   int right_w = available_w - left_w - grids_gap;
+   if(right_w < 160)
      {
-      detail_h = 80;
-      main_h = available_h - detail_h - grids_gap;
-      if(main_h < 80)
-         main_h = 80;
+      right_w = 160;
+      left_w = available_w - right_w - grids_gap;
+      if(left_w < 160)
+         left_w = 160;
      }
-   g_pairs_w = w - 24 - g_pairs_scroll_w - 4;
-   g_pairs_h = main_h;
+   g_pairs_w = left_w - g_pairs_scroll_w - 4;
+   g_pairs_h = available_h;
    g_pairs_visible_rows = (g_pairs_h - header_h - 6) / (g_pairs_row_h + g_pairs_row_gap);
    if(g_pairs_visible_rows < 1)
       g_pairs_visible_rows = 1;
@@ -836,7 +837,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
         }
      }
 
-   const int scroll_x1 = x + w - 12 - g_pairs_scroll_w;
+   const int scroll_x1 = g_pairs_x + g_pairs_w + 4;
    const int scroll_y1 = g_pairs_data_y;
    const int scroll_x2 = scroll_x1 + g_pairs_scroll_w;
    const int scroll_y2 = g_pairs_data_y + g_pairs_visible_rows * (g_pairs_row_h + g_pairs_row_gap) - g_pairs_row_gap;
@@ -854,10 +855,10 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_empty.ColorBorder(clrWhite);
    g_app.Add(g_pairs_empty);
 
-   g_pairs_detail_x = g_pairs_x;
-   g_pairs_detail_y = g_pairs_y + g_pairs_h + grids_gap;
-   g_pairs_detail_w = g_pairs_w;
-   g_pairs_detail_h = detail_h;
+   g_pairs_detail_x = g_pairs_x + left_w + grids_gap;
+   g_pairs_detail_y = g_pairs_y;
+   g_pairs_detail_w = right_w - g_pairs_detail_scroll_w - 4;
+   g_pairs_detail_h = available_h;
    g_pairs_detail_visible_rows = (g_pairs_detail_h - header_h - 6) / (g_pairs_detail_row_h + g_pairs_detail_row_gap);
    if(g_pairs_detail_visible_rows < 1)
       g_pairs_detail_visible_rows = 1;
@@ -912,7 +913,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
         }
      }
 
-   const int detail_scroll_x1 = x + w - 12 - g_pairs_detail_scroll_w;
+   const int detail_scroll_x1 = g_pairs_detail_x + g_pairs_detail_w + 4;
    const int detail_scroll_y1 = g_pairs_detail_data_y;
    const int detail_scroll_x2 = detail_scroll_x1 + g_pairs_detail_scroll_w;
    const int detail_scroll_y2 = g_pairs_detail_data_y + g_pairs_detail_visible_rows * (g_pairs_detail_row_h + g_pairs_detail_row_gap) - g_pairs_detail_row_gap;
