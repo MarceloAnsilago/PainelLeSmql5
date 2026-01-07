@@ -143,9 +143,30 @@ bool CalcZScore(const double &spread[], const int spread_count, const int window
 
 bool CalcHalfLife(const double &spread[], const int spread_count, double &half_life)
 {
-   // TODO: implement half-life on spread.
-   half_life = 0.0;
-   return(false);
+   if(spread_count < 2)
+      return(false);
+
+   double mean = 0.0;
+   for(int i = 0; i < spread_count; i++)
+      mean += spread[i];
+   mean /= spread_count;
+
+   double num = 0.0;
+   double den = 0.0;
+   for(int i = 0; i < spread_count - 1; i++)
+     {
+      const double x = spread[i + 1] - mean;
+      const double y = (spread[i] - spread[i + 1]);
+      num += x * y;
+      den += x * x;
+     }
+   if(den <= 0.0)
+      return(false);
+   const double b = num / den;
+   if(b >= 0.0)
+      return(false);
+   half_life = -MathLog(2.0) / b;
+   return(true);
 }
 
 bool CalcADF(const double &spread[], const int spread_count, double &adf_pvalue)

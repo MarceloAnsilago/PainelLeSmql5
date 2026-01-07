@@ -130,6 +130,7 @@ color     g_quotes_border = (color)0xD0D0D0;
 
 CButton   g_pairs_scan_btn;
 CLabel    g_pairs_status;
+CLabel    g_pairs_metrics;
 CEdit     g_pairs_headers[];
 CEdit     g_pairs_cells[];
 CLabel    g_pairs_empty;
@@ -452,6 +453,7 @@ void SetParesVisible(const bool flag)
 {
    g_pairs_scan_btn.Visible(flag);
    g_pairs_status.Visible(flag);
+   g_pairs_metrics.Visible(flag);
    g_pairs_empty.Visible(flag);
    g_pairs_scroll.Visible(flag);
    for(int i = 0; i < ArraySize(g_pairs_headers); i++)
@@ -623,6 +625,31 @@ void BuildPairScanConfig(PairScanConfig &cfg)
    cfg.windows_total = ParseWindowsList(g_cfg_windows_input.Text(), cfg.windows);
 }
 
+void UpdatePairsMetricsLabel()
+{
+   PairScanConfig cfg;
+   BuildPairScanConfig(cfg);
+   string text = "Base " + IntegerToString(cfg.base_window);
+   text += " | Corr>=" + DoubleToString(cfg.corr_min, 2);
+   if(cfg.z_min > 0.0)
+      text += " | Z>=" + DoubleToString(cfg.z_min, 2);
+   else
+      text += " | Z off";
+   if(cfg.half_max > 0.0)
+      text += " | M.vida<=" + DoubleToString(cfg.half_max, 2);
+   else
+      text += " | M.vida off";
+   if(cfg.adf_min > 0.0)
+      text += " | ADF>=" + DoubleToString(cfg.adf_min, 2);
+   else
+      text += " | ADF off";
+   if(cfg.beta_window > 0)
+      text += " | BetaWin " + IntegerToString(cfg.beta_window);
+   else
+      text += " | BetaWin off";
+   g_pairs_metrics.Text(text);
+}
+
 void ScanPairs()
 {
    string symbols[];
@@ -630,6 +657,7 @@ void ScanPairs()
    PairScanConfig cfg;
    BuildPairScanConfig(cfg);
 
+   UpdatePairsMetricsLabel();
    if(ScanPairsBaseWindow(symbols, symbols_total, cfg, 60))
       EventSetTimer(1);
 }
@@ -649,12 +677,23 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_scan_btn.Text("Scanear");
    g_app.Add(g_pairs_scan_btn);
 
-   if(!g_pairs_status.Create(0, "pairs_status", 0, left + btn_w + 10, y_top, right, y_top + btn_h))
+   const int metrics_w = 420;
+   const int metrics_x1 = right - metrics_w;
+   const int status_x1 = left + btn_w + 10;
+   const int status_x2 = metrics_x1 - 8;
+   if(!g_pairs_status.Create(0, "pairs_status", 0, status_x1, y_top, status_x2, y_top + btn_h))
       return(false);
    g_pairs_status.Text("");
    g_pairs_status.ColorBackground(clrWhite);
    g_pairs_status.ColorBorder(clrWhite);
    g_app.Add(g_pairs_status);
+
+   if(!g_pairs_metrics.Create(0, "pairs_metrics", 0, metrics_x1, y_top, right, y_top + btn_h))
+      return(false);
+   g_pairs_metrics.Text("");
+   g_pairs_metrics.ColorBackground(clrWhite);
+   g_pairs_metrics.ColorBorder(clrWhite);
+   g_app.Add(g_pairs_metrics);
 
    g_pairs_x = left;
    g_pairs_y = y_top + btn_h + 10;
@@ -685,7 +724,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    if(sum_w < g_pairs_w)
       g_pairs_col_w[PAIRS_COLS - 1] += (g_pairs_w - sum_w);
 
-   string col_names[PAIRS_COLS] = {"Par", "Corr", "Score", "Beta", "Z", "Half", "ADF", "Status", "Janela"};
+   string col_names[PAIRS_COLS] = {"Par", "Corr", "Score", "Beta", "Z", "M.vida", "ADF", "Status", "Janela"};
    ArrayResize(g_pairs_headers, PAIRS_COLS);
    int x_cursor = g_pairs_x;
    for(int i = 0; i < PAIRS_COLS; i++)
@@ -761,7 +800,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    if(detail_sum < g_pairs_detail_w)
       g_pairs_detail_col_w[PAIRS_DETAIL_COLS - 1] += (g_pairs_detail_w - detail_sum);
 
-   string detail_cols[PAIRS_DETAIL_COLS] = {"Janela", "Corr", "Score", "Beta", "Z", "Half", "ADF", "Status"};
+   string detail_cols[PAIRS_DETAIL_COLS] = {"Janela", "Corr", "Score", "Beta", "Z", "M.vida", "ADF", "Status"};
    ArrayResize(g_pairs_detail_headers, PAIRS_DETAIL_COLS);
    x_cursor = g_pairs_detail_x;
    for(int i = 0; i < PAIRS_DETAIL_COLS; i++)
@@ -1177,6 +1216,7 @@ void SwitchTab(const int index)
      }
    if(index == PARES_TAB)
      {
+      UpdatePairsMetricsLabel();
       UpdatePairsGrid();
       UpdatePairsDetailGrid();
      }
