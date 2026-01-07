@@ -32,6 +32,7 @@ CPanel     g_left;
 #define TAB_COUNT 8
 #define ACTIONS_TAB 1
 #define COTACOES_TAB 3
+#define CONFIG_TAB 6
 CButton    g_tabs[TAB_COUNT];
 CLabel     g_icons[TAB_COUNT];
 CPanel     g_pages[TAB_COUNT];
@@ -87,6 +88,24 @@ color     g_quotes_header_bg = (color)0xE6E6E6;
 color     g_quotes_row_bg_a = (color)0xFFFFFF;
 color     g_quotes_row_bg_b = (color)0xF5F5F5;
 color     g_quotes_border = (color)0xD0D0D0;
+CLabel    g_cfg_title;
+CLabel    g_cfg_base_label;
+CEdit     g_cfg_base_input;
+CLabel    g_cfg_windows_label;
+CEdit     g_cfg_windows_input;
+CLabel    g_cfg_windows_help;
+CLabel    g_cfg_windows_current;
+CLabel    g_cfg_adf_label;
+CEdit     g_cfg_adf_input;
+CLabel    g_cfg_z_label;
+CEdit     g_cfg_z_input;
+CLabel    g_cfg_beta_label;
+CEdit     g_cfg_beta_input;
+CLabel    g_cfg_beta_help;
+CLabel    g_cfg_half_label;
+CEdit     g_cfg_half_input;
+CLabel    g_cfg_half_help;
+CLabel    g_cfg_half_help2;
 
 
 
@@ -349,6 +368,27 @@ void SetCotacoesVisible(const bool flag)
       g_quotes_dates[i].Visible(flag);
    for(int i = 0; i < ArraySize(g_quotes_cells); i++)
       g_quotes_cells[i].Visible(flag);
+}
+void SetConfigVisible(const bool flag)
+{
+   g_cfg_title.Visible(flag);
+   g_cfg_base_label.Visible(flag);
+   g_cfg_base_input.Visible(flag);
+   g_cfg_windows_label.Visible(flag);
+   g_cfg_windows_input.Visible(flag);
+   g_cfg_windows_help.Visible(flag);
+   g_cfg_windows_current.Visible(flag);
+   g_cfg_adf_label.Visible(flag);
+   g_cfg_adf_input.Visible(flag);
+   g_cfg_z_label.Visible(flag);
+   g_cfg_z_input.Visible(flag);
+   g_cfg_beta_label.Visible(flag);
+   g_cfg_beta_input.Visible(flag);
+   g_cfg_beta_help.Visible(flag);
+   g_cfg_half_label.Visible(flag);
+   g_cfg_half_input.Visible(flag);
+   g_cfg_half_help.Visible(flag);
+   g_cfg_half_help2.Visible(flag);
 }
 
 void UpdateCotacoesGrid()
@@ -625,6 +665,167 @@ bool InitCotacoesTab(const int x, const int y, const int w, const int h)
    return(true);
 }
 
+bool InitConfigTab(const int x, const int y, const int w, const int h)
+{
+   const int header_h = 18;
+   const int top_pad = 8;
+   const int y_top = y + top_pad;
+   const int left = x + 12;
+   const int right = x + w - 12;
+   const int col_gap = 16;
+   const int label_h = 16;
+   const int input_h = 22;
+
+   int y_cursor = y_top;
+
+   if(!g_cfg_title.Create(0, "cfg_title", 0, left, y_cursor, right, y_cursor + header_h))
+      return(false);
+   g_cfg_title.Text("Configuracoes de metricas");
+   g_cfg_title.ColorBackground(clrWhite);
+   g_cfg_title.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_title);
+
+   y_cursor += header_h + 10;
+
+   const int col_w = (w - 24 - col_gap) / 2;
+   const int left_x = left;
+   const int right_x = left + col_w + col_gap;
+
+   if(!g_cfg_base_label.Create(0, "cfg_base_lbl", 0, left_x, y_cursor, left_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_base_label.Text("Janela base (Grid A)");
+   g_cfg_base_label.ColorBackground(clrWhite);
+   g_cfg_base_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_base_label);
+
+   if(!g_cfg_windows_label.Create(0, "cfg_windows_lbl", 0, right_x, y_cursor, right_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_windows_label.Text("Janelas (dias)");
+   g_cfg_windows_label.ColorBackground(clrWhite);
+   g_cfg_windows_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_windows_label);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_base_input.Create(0, "cfg_base", 0, left_x, y_cursor, left_x + col_w, y_cursor + input_h))
+      return(false);
+   g_cfg_base_input.Text("180");
+   g_app.Add(g_cfg_base_input);
+
+   if(!g_cfg_windows_input.Create(0, "cfg_windows", 0, right_x, y_cursor, right_x + col_w, y_cursor + input_h))
+      return(false);
+   g_cfg_windows_input.Text("80,90,100,110,120,140,160,180");
+   g_app.Add(g_cfg_windows_input);
+
+   y_cursor += input_h + 6;
+
+   if(!g_cfg_windows_help.Create(0, "cfg_windows_help", 0, right_x, y_cursor, right_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_windows_help.Text("Informe valores separados por virgula, ex.: 120,140,160.");
+   g_cfg_windows_help.ColorBackground(clrWhite);
+   g_cfg_windows_help.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_windows_help);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_windows_current.Create(0, "cfg_windows_cur", 0, right_x, y_cursor, right_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_windows_current.Text("Janelas atuais: 80, 90, 100, 110, 120, 140, 160, 180");
+   g_cfg_windows_current.ColorBackground(clrWhite);
+   g_cfg_windows_current.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_windows_current);
+
+   y_cursor += label_h + 12;
+
+   const int col3_w = (w - 24 - (col_gap * 2)) / 3;
+   const int col1_x = left;
+   const int col2_x = col1_x + col3_w + col_gap;
+   const int col3_x = col2_x + col3_w + col_gap;
+
+   if(!g_cfg_adf_label.Create(0, "cfg_adf_lbl", 0, col1_x, y_cursor, col1_x + col3_w, y_cursor + label_h))
+      return(false);
+   g_cfg_adf_label.Text("ADF minimo (%)");
+   g_cfg_adf_label.ColorBackground(clrWhite);
+   g_cfg_adf_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_adf_label);
+
+   if(!g_cfg_z_label.Create(0, "cfg_z_lbl", 0, col2_x, y_cursor, col2_x + col3_w, y_cursor + label_h))
+      return(false);
+   g_cfg_z_label.Text("Z-score minimo (valor absoluto)");
+   g_cfg_z_label.ColorBackground(clrWhite);
+   g_cfg_z_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_z_label);
+
+   if(!g_cfg_beta_label.Create(0, "cfg_beta_lbl", 0, col3_x, y_cursor, col3_x + col3_w, y_cursor + label_h))
+      return(false);
+   g_cfg_beta_label.Text("Janela movel do beta");
+   g_cfg_beta_label.ColorBackground(clrWhite);
+   g_cfg_beta_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_beta_label);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_adf_input.Create(0, "cfg_adf", 0, col1_x, y_cursor, col1_x + col3_w, y_cursor + input_h))
+      return(false);
+   g_cfg_adf_input.Text("95,0");
+   g_app.Add(g_cfg_adf_input);
+
+   if(!g_cfg_z_input.Create(0, "cfg_z", 0, col2_x, y_cursor, col2_x + col3_w, y_cursor + input_h))
+      return(false);
+   g_cfg_z_input.Text("2,0");
+   g_app.Add(g_cfg_z_input);
+
+   if(!g_cfg_beta_input.Create(0, "cfg_beta", 0, col3_x, y_cursor, col3_x + col3_w, y_cursor + input_h))
+      return(false);
+   g_cfg_beta_input.Text("2");
+   g_app.Add(g_cfg_beta_input);
+
+   y_cursor += input_h + 6;
+
+   if(!g_cfg_beta_help.Create(0, "cfg_beta_help", 0, col3_x, y_cursor, col3_x + col3_w, y_cursor + label_h))
+      return(false);
+   g_cfg_beta_help.Text("Usada no grafico de beta movel.");
+   g_cfg_beta_help.ColorBackground(clrWhite);
+   g_cfg_beta_help.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_beta_help);
+
+   y_cursor += label_h + 12;
+
+   if(!g_cfg_half_label.Create(0, "cfg_half_lbl", 0, left_x, y_cursor, left_x + col_w, y_cursor + label_h))
+      return(false);
+   g_cfg_half_label.Text("Half-life maximo (dias)");
+   g_cfg_half_label.ColorBackground(clrWhite);
+   g_cfg_half_label.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_half_label);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_half_input.Create(0, "cfg_half", 0, left_x, y_cursor, left_x + col_w, y_cursor + input_h))
+      return(false);
+   g_cfg_half_input.Text("5,0");
+   g_app.Add(g_cfg_half_input);
+
+   y_cursor += input_h + 6;
+
+   if(!g_cfg_half_help.Create(0, "cfg_half_help", 0, left_x, y_cursor, right, y_cursor + label_h))
+      return(false);
+   g_cfg_half_help.Text("Zero desativa o filtro. Limites menores privilegiam pares que");
+   g_cfg_half_help.ColorBackground(clrWhite);
+   g_cfg_half_help.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_half_help);
+
+   y_cursor += label_h + 4;
+
+   if(!g_cfg_half_help2.Create(0, "cfg_half_help2", 0, left_x, y_cursor, right, y_cursor + label_h))
+      return(false);
+   g_cfg_half_help2.Text("convergem rapido.");
+   g_cfg_half_help2.ColorBackground(clrWhite);
+   g_cfg_half_help2.ColorBorder(clrWhite);
+   g_app.Add(g_cfg_half_help2);
+
+   SetConfigVisible(false);
+   return(true);
+}
 void SwitchTab(const int index)
 {
    if(index < 0 || index >= TAB_COUNT)
@@ -632,6 +833,7 @@ void SwitchTab(const int index)
    for(int i = 0; i < TAB_COUNT; i++)
       g_pages[i].Visible(i == index);
    SetAcoesVisible(index == ACTIONS_TAB);
+   SetConfigVisible(index == CONFIG_TAB);
    if(index == COTACOES_TAB)
      {
       SetCotacoesVisible(true);
@@ -680,6 +882,8 @@ int OnInit()
    if(!InitAcoesTab(content_x, content_y, content_w, content_h))
       return(INIT_FAILED);
    if(!InitCotacoesTab(content_x, content_y, content_w, content_h))
+      return(INIT_FAILED);
+   if(!InitConfigTab(content_x, content_y, content_w, content_h))
       return(INIT_FAILED);
    const int tab_x = 12;
    const int tab_y = 12;
