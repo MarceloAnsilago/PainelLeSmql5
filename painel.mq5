@@ -7,6 +7,7 @@
 #include <Controls/Label.mqh>
 #include <Controls/CheckBox.mqh>
 #include <Controls/Edit.mqh>
+#include <Controls/ListView.mqh>
 #include <Controls/Scrolls.mqh>
 #include "LongShortMetrics.mqh"
 
@@ -131,6 +132,10 @@ color     g_quotes_border = (color)0xD0D0D0;
 CButton   g_pairs_scan_btn;
 CLabel    g_pairs_status;
 CLabel    g_pairs_metrics;
+CEdit     g_pairs_base_display;
+CButton   g_pairs_base_drop;
+CListView g_pairs_base_list;
+bool      g_pairs_base_list_open = false;
 CEdit     g_pairs_headers[];
 CEdit     g_pairs_cells[];
 CLabel    g_pairs_empty;
@@ -454,6 +459,9 @@ void SetParesVisible(const bool flag)
    g_pairs_scan_btn.Visible(flag);
    g_pairs_status.Visible(flag);
    g_pairs_metrics.Visible(flag);
+   g_pairs_base_display.Visible(flag);
+   g_pairs_base_drop.Visible(flag);
+   g_pairs_base_list.Visible(flag && g_pairs_base_list_open);
    g_pairs_empty.Visible(flag);
    g_pairs_scroll.Visible(flag);
    for(int i = 0; i < ArraySize(g_pairs_headers); i++)
@@ -616,13 +624,58 @@ void UpdateCotacoesGrid()
 
 void BuildPairScanConfig(PairScanConfig &cfg)
 {
-   cfg.base_window = ParseIntText(g_cfg_base_input.Text(), 180);
+   int base_window = ParseIntText(g_cfg_base_input.Text(), 180);
+   const long list_val = g_pairs_base_list.Value();
+   if(list_val > 0)
+     {
+      base_window = (int)list_val;
+     }
+   else
+     {
+      const string text = g_pairs_base_display.Text();
+      const int parsed_val = ParseIntText(text, 0);
+      if(parsed_val > 0)
+         base_window = parsed_val;
+     }
+   cfg.base_window = base_window;
    cfg.corr_min = ParseDoubleText(g_cfg_corr_input.Text(), 0.75);
    cfg.z_min = ParseDoubleText(g_cfg_z_input.Text(), 0.0);
    cfg.adf_min = ParseDoubleText(g_cfg_adf_input.Text(), 0.0);
    cfg.half_max = ParseDoubleText(g_cfg_half_input.Text(), 0.0);
    cfg.beta_window = ParseIntText(g_cfg_beta_input.Text(), 0);
    cfg.windows_total = ParseWindowsList(g_cfg_windows_input.Text(), cfg.windows);
+}
+
+void FillPairsBaseCombo()
+{
+   g_pairs_base_list.ItemsClear();
+   int windows[];
+   const int total = ParseWindowsList(g_cfg_windows_input.Text(), windows);
+   int base_window = ParseIntText(g_cfg_base_input.Text(), 180);
+   for(int i = 0; i < total - 1; i++)
+     {
+      for(int j = i + 1; j < total; j++)
+        {
+         if(windows[j] > windows[i])
+           {
+            const int tmp = windows[i];
+            windows[i] = windows[j];
+            windows[j] = tmp;
+           }
+        }
+     }
+   if(base_window > 0)
+      g_pairs_base_list.AddItem(IntegerToString(base_window), base_window);
+   for(int i = 0; i < total; i++)
+     {
+      const int val = windows[i];
+      if(val <= 0 || val == base_window)
+         continue;
+      g_pairs_base_list.AddItem(IntegerToString(val), val);
+     }
+   g_pairs_base_display.Text(base_window > 0 ? IntegerToString(base_window) : "");
+   g_pairs_base_list.SelectByValue(base_window);
+   g_pairs_base_list_open = false;
 }
 
 void UpdatePairsMetricsLabel()
@@ -671,15 +724,34 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    const int right = x + w - 12;
    const int btn_w = 110;
    const int btn_h = 24;
+   const int base_w = 70;
+   const int drop_w = 20;
+   const int base_gap = 6;
+   const int base_x1 = left;
+   const int base_x2 = base_x1 + base_w;
+   const int drop_x1 = base_x2;
+   const int drop_x2 = drop_x1 + drop_w;
+   const int btn_x1 = drop_x2 + base_gap;
 
-   if(!g_pairs_scan_btn.Create(0, "pairs_scan_btn", 0, left, y_top, left + btn_w, y_top + btn_h))
+   if(!g_pairs_base_display.Create(0, "pairs_base_display", 0, base_x1, y_top, base_x2, y_top + btn_h))
+      return(false);
+   g_pairs_base_display.ReadOnly(true);
+   g_pairs_base_display.Text("");
+   g_app.Add(g_pairs_base_display);
+
+   if(!g_pairs_base_drop.Create(0, "pairs_base_drop", 0, drop_x1, y_top, drop_x2, y_top + btn_h))
+      return(false);
+   g_pairs_base_drop.Text("v");
+   g_app.Add(g_pairs_base_drop);
+
+   if(!g_pairs_scan_btn.Create(0, "pairs_scan_btn", 0, btn_x1, y_top, btn_x1 + btn_w, y_top + btn_h))
       return(false);
    g_pairs_scan_btn.Text("Scanear");
    g_app.Add(g_pairs_scan_btn);
 
    const int metrics_w = 420;
    const int metrics_x1 = right - metrics_w;
-   const int status_x1 = left + btn_w + 10;
+   const int status_x1 = btn_x1 + btn_w + 10;
    const int status_x2 = metrics_x1 - 8;
    if(!g_pairs_status.Create(0, "pairs_status", 0, status_x1, y_top, status_x2, y_top + btn_h))
       return(false);
@@ -857,6 +929,14 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_detail_empty.ColorBackground(clrWhite);
    g_pairs_detail_empty.ColorBorder(clrWhite);
    g_app.Add(g_pairs_detail_empty);
+   const int list_visible = 6;
+   const int list_y1 = y_top + btn_h + 2;
+   const int list_y2 = list_y1 + list_visible * (g_pairs_row_h + g_pairs_row_gap) + 2;
+   g_pairs_base_list.TotalView(list_visible);
+   if(!g_pairs_base_list.Create(0, "pairs_base_list", 0, base_x1, list_y1, drop_x2, list_y2))
+      return(false);
+   g_pairs_base_list.Hide();
+   g_app.Add(g_pairs_base_list);
 
    SetParesVisible(false);
    return(true);
@@ -1216,6 +1296,7 @@ void SwitchTab(const int index)
      }
    if(index == PARES_TAB)
      {
+      FillPairsBaseCombo();
       UpdatePairsMetricsLabel();
       UpdatePairsGrid();
       UpdatePairsDetailGrid();
@@ -1310,11 +1391,41 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
      {
       ChartSetInteger(0, CHART_MOUSE_SCROLL, false);
      }
+   g_app.ChartEvent(id, l, d, s);
+   if(id == CHARTEVENT_CUSTOM && l == ON_CHANGE && s == "pairs_base_list")
+     {
+      const string text = g_pairs_base_list.Select();
+      if(text != "")
+         g_pairs_base_display.Text(text);
+      g_pairs_base_list_open = false;
+      g_pairs_base_list.Hide();
+      UpdatePairsMetricsLabel();
+     }
    if(id == CHARTEVENT_OBJECT_CLICK)
      {
       if(s == "pairs_scan_btn")
         {
          ScanPairs();
+        }
+      else if(s == "pairs_base_drop" || s == "pairs_base_display")
+        {
+         g_pairs_base_list_open = !g_pairs_base_list_open;
+         if(g_pairs_base_list_open)
+            g_pairs_base_list.Show();
+         else
+            g_pairs_base_list.Hide();
+        }
+      else if(StringFind(s, "pairs_base_listItem") == 0)
+        {
+         const string item_text = ObjectGetString(0, s, OBJPROP_TEXT);
+         if(item_text != "")
+           {
+            g_pairs_base_list.SelectByText(item_text);
+            g_pairs_base_display.Text(item_text);
+           }
+         g_pairs_base_list_open = false;
+         g_pairs_base_list.Hide();
+         UpdatePairsMetricsLabel();
         }
       else if(StringFind(s, "pairs_cell_") == 0)
         {
@@ -1389,7 +1500,12 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
            }
         }
      }
-   g_app.ChartEvent(id, l, d, s);
+
+   if((id == CHARTEVENT_OBJECT_CHANGE || id == CHARTEVENT_OBJECT_ENDEDIT) &&
+      StringFind(s, "pairs_base_combo") == 0)
+     {
+      UpdatePairsMetricsLabel();
+     }
 }
 
 
