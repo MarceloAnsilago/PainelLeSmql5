@@ -11,6 +11,7 @@
 #include <Controls/Scrolls.mqh>
 #include "LongShortMetrics.mqh"
 
+
 void UpdateCotacoesGrid();
 void UpdatePairsGrid();
 void UpdatePairsDetailGrid();
@@ -172,6 +173,17 @@ int       g_pairs_detail_scroll_pos = 0;
 int       g_pairs_detail_scroll_w = 14;
 int       g_pairs_detail_data_y = 0;
 int       g_pairs_detail_col_w[PAIRS_DETAIL_COLS];
+
+CLabel    g_pairs_z_title;
+CPanel    g_pairs_z_bg;
+CEdit     g_pairs_z_dots[];
+CPanel    g_pairs_z_line_dots[];
+int       g_pairs_z_max_points = 120;
+int       g_pairs_z_line_max = 2000;
+int       g_pairs_z_x = 0;
+int       g_pairs_z_y = 0;
+int       g_pairs_z_w = 0;
+int       g_pairs_z_h = 0;
 
 CLabel    g_cfg_title;
 CLabel    g_cfg_base_label;
@@ -462,6 +474,12 @@ void SetParesVisible(const bool flag)
    g_pairs_base_display.Visible(flag);
    g_pairs_base_drop.Visible(flag);
    g_pairs_base_list.Visible(flag && g_pairs_base_list_open);
+   g_pairs_z_title.Visible(flag);
+   g_pairs_z_bg.Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_z_dots); i++)
+      g_pairs_z_dots[i].Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_z_line_dots); i++)
+      g_pairs_z_line_dots[i].Visible(flag);
    g_pairs_empty.Visible(flag);
    g_pairs_scroll.Visible(flag);
    for(int i = 0; i < ArraySize(g_pairs_headers); i++)
@@ -703,6 +721,118 @@ void UpdatePairsMetricsLabel()
    g_pairs_metrics.Text(text);
 }
 
+void DrawZScoreChart(const double &zvals[], const int total, const string title)
+{
+   const int pad = 6;
+   const int w = g_pairs_z_w;
+   const int h = g_pairs_z_h;
+
+   if(total < 2)
+     {
+      for(int i = 0; i < ArraySize(g_pairs_z_dots); i++)
+         g_pairs_z_dots[i].Visible(false);
+      for(int i = 0; i < ArraySize(g_pairs_z_line_dots); i++)
+         g_pairs_z_line_dots[i].Visible(false);
+      g_pairs_z_title.Text(title);
+      return;
+     }
+
+   double min_v = zvals[0];
+   double max_v = zvals[0];
+   for(int i = 1; i < total; i++)
+     {
+      if(zvals[i] < min_v)
+         min_v = zvals[i];
+      if(zvals[i] > max_v)
+         max_v = zvals[i];
+     }
+   if(min_v > 0.0)
+      min_v = 0.0;
+   if(max_v < 0.0)
+      max_v = 0.0;
+   if(MathAbs(max_v - min_v) < 1e-6)
+     {
+      max_v = min_v + 1.0;
+      min_v -= 1.0;
+     }
+
+   const int plot_x1 = g_pairs_z_x + pad;
+   const int plot_y1 = g_pairs_z_y + pad;
+   const int plot_x2 = g_pairs_z_x + w - pad - 1;
+   const int plot_y2 = g_pairs_z_y + h - pad - 1;
+   const double range = max_v - min_v;
+   const int dot = 6;
+   const int dots_total = MathMin(total, ArraySize(g_pairs_z_dots));
+   int xs[];
+   int ys[];
+   ArrayResize(xs, dots_total);
+   ArrayResize(ys, dots_total);
+
+   for(int i = 0; i < dots_total; i++)
+     {
+      const int x = plot_x1 + (int)((double)i * (plot_x2 - plot_x1) / (double)(dots_total - 1));
+      const double val = zvals[total - 1 - i];
+      const int y = plot_y1 + (int)(((max_v - val) / range) * (plot_y2 - plot_y1));
+      xs[i] = x;
+      ys[i] = y;
+      g_pairs_z_dots[i].Move(x - dot / 2, y - dot / 2);
+      g_pairs_z_dots[i].Size(dot, dot);
+      g_pairs_z_dots[i].Visible(true);
+     }
+   for(int i = dots_total; i < ArraySize(g_pairs_z_dots); i++)
+      g_pairs_z_dots[i].Visible(false);
+
+   int line_count = 0;
+   const int line_size = 2;
+   for(int i = 1; i < dots_total && line_count < ArraySize(g_pairs_z_line_dots); i++)
+     {
+      const int x1 = xs[i - 1];
+      const int y1 = ys[i - 1];
+      const int x2 = xs[i];
+      const int y2 = ys[i];
+      int dx = MathAbs(x2 - x1);
+      int dy = MathAbs(y2 - y1);
+      int steps = (dx > dy ? dx : dy);
+      if(steps < 1)
+         steps = 1;
+      int stride = 1;
+      for(int s = 0; s <= steps && line_count < ArraySize(g_pairs_z_line_dots); s += stride)
+        {
+         const int x = x1 + (int)((double)(x2 - x1) * s / steps);
+         const int y = y1 + (int)((double)(y2 - y1) * s / steps);
+         g_pairs_z_line_dots[line_count].Move(x - line_size / 2, y - line_size / 2);
+         g_pairs_z_line_dots[line_count].Size(line_size, line_size);
+         g_pairs_z_line_dots[line_count].Visible(true);
+         line_count++;
+        }
+     }
+   for(int i = line_count; i < ArraySize(g_pairs_z_line_dots); i++)
+      g_pairs_z_line_dots[i].Visible(false);
+   g_pairs_z_title.Text(title);
+   ChartRedraw(0);
+}
+
+void UpdateZScoreChartForDetailRow(const int detail_index)
+{
+   if(detail_index < 0 || detail_index >= ArraySize(g_pairs_detail_rows))
+      return;
+   if(g_pairs_selected_index < 0 || g_pairs_selected_index >= ArraySize(g_pairs_results))
+      return;
+
+   const PairMainRow base = g_pairs_results[g_pairs_selected_index];
+   const int window = g_pairs_detail_rows[detail_index].window;
+
+   double zvals[];
+   const int max_points = 120;
+   if(!BuildZScoreSeries(base.sym_a, base.sym_b, window, max_points, zvals))
+     {
+      DrawZScoreChart(zvals, 0, "Z-score " + base.sym_a + "/" + base.sym_b + " | janela " + IntegerToString(window));
+      return;
+     }
+
+   DrawZScoreChart(zvals, ArraySize(zvals), "Z-score " + base.sym_a + "/" + base.sym_b + " | janela " + IntegerToString(window));
+}
+
 void ScanPairs()
 {
    string symbols[];
@@ -773,6 +903,10 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    int grids_h = (int)(available_h * 0.4);
    if(grids_h < 120)
       grids_h = 120;
+   const int bottom_gap = 12;
+   int bottom_h = available_h - grids_h - bottom_gap;
+   if(bottom_h < 80)
+      bottom_h = 80;
    const int grids_gap = 12;
    const int available_w = w - 24;
    int left_w = (int)(available_w * 0.5);
@@ -941,6 +1075,53 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
       return(false);
    g_pairs_base_list.Hide();
    g_app.Add(g_pairs_base_list);
+
+   g_pairs_z_x = left;
+   g_pairs_z_y = g_pairs_y + grids_h + bottom_gap;
+   g_pairs_z_w = available_w;
+   const int z_title_h = 18;
+   if(!g_pairs_z_title.Create(0, "pairs_z_title", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + z_title_h))
+      return(false);
+   g_pairs_z_title.Text("Z-score");
+   g_pairs_z_title.ColorBackground(clrWhite);
+   g_pairs_z_title.ColorBorder(clrWhite);
+   g_app.Add(g_pairs_z_title);
+
+   g_pairs_z_h = bottom_h - z_title_h - 4;
+   if(g_pairs_z_h < 40)
+      g_pairs_z_h = 40;
+   g_pairs_z_y = g_pairs_z_y + z_title_h + 4;
+   if(!g_pairs_z_bg.Create(0, "pairs_z_bg", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + g_pairs_z_h))
+      return(false);
+   g_pairs_z_bg.ColorBackground(clrWhite);
+   g_pairs_z_bg.ColorBorder((color)0xD0D0D0);
+   g_app.Add(g_pairs_z_bg);
+
+   ArrayResize(g_pairs_z_dots, g_pairs_z_max_points);
+   for(int i = 0; i < g_pairs_z_max_points; i++)
+     {
+      const string name = "pairs_z_dot_" + IntegerToString(i);
+      if(!g_pairs_z_dots[i].Create(0, name, 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + 2, g_pairs_z_y + 2))
+         return(false);
+      g_pairs_z_dots[i].Text("");
+      g_pairs_z_dots[i].ColorBackground(clrWhite);
+      g_pairs_z_dots[i].ColorBorder((color)0xFF6A00);
+      g_pairs_z_dots[i].ReadOnly(true);
+      g_pairs_z_dots[i].Visible(false);
+      g_app.Add(g_pairs_z_dots[i]);
+     }
+
+   ArrayResize(g_pairs_z_line_dots, g_pairs_z_line_max);
+   for(int i = 0; i < g_pairs_z_line_max; i++)
+     {
+      const string name = "pairs_z_line_" + IntegerToString(i);
+      if(!g_pairs_z_line_dots[i].Create(0, name, 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + 1, g_pairs_z_y + 1))
+         return(false);
+      g_pairs_z_line_dots[i].ColorBackground((color)0x0078D7);
+      g_pairs_z_line_dots[i].ColorBorder((color)0x0078D7);
+      g_pairs_z_line_dots[i].Visible(false);
+      g_app.Add(g_pairs_z_line_dots[i]);
+     }
 
    SetParesVisible(false);
    return(true);
@@ -1440,6 +1621,15 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
          PairScanConfig cfg;
          BuildPairScanConfig(cfg);
          FillDetailGridForSelectedPair(data_index, cfg);
+        }
+      else if(StringFind(s, "pairs_detail_cell_") == 0)
+        {
+         const int prefix_len = StringLen("pairs_detail_cell_");
+         const int idx = (int)StringToInteger(StringSubstr(s, prefix_len));
+         const int row = idx / PAIRS_DETAIL_COLS;
+         const int detail_index = g_pairs_detail_scroll_pos + row;
+         UpdateZScoreChartForDetailRow(detail_index);
+         ChartRedraw(0);
         }
       else if(s == "cot_btn_prev")
         {

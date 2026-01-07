@@ -479,6 +479,54 @@ bool WindowListContains(const int &list[], const int value)
    return(false);
 }
 
+bool BuildZScoreSeries(const string sym_a, const string sym_b, const int window, const int points, double &out[])
+{
+   ArrayResize(out, 0);
+   if(window < 2 || points < 1)
+      return(false);
+
+   const int bars_needed = window + points;
+   double closes_a[];
+   double closes_b[];
+   datetime times_a[];
+   datetime times_b[];
+   const int got_a = CopyClose(sym_a, PERIOD_D1, 0, bars_needed, closes_a);
+   const int got_b = CopyClose(sym_b, PERIOD_D1, 0, bars_needed, closes_b);
+   if(got_a < window + 1 || got_b < window + 1)
+      return(false);
+   const int got_ta = CopyTime(sym_a, PERIOD_D1, 0, bars_needed, times_a);
+   const int got_tb = CopyTime(sym_b, PERIOD_D1, 0, bars_needed, times_b);
+   if(got_ta < window + 1 || got_tb < window + 1)
+      return(false);
+   if(!TimesAligned(times_a, times_b, MathMin(got_ta, got_tb)))
+      return(false);
+
+   const int max_points = MathMin(points, MathMin(got_a, got_b) - window + 1);
+   if(max_points < 1)
+      return(false);
+
+   double spread[];
+   ArrayResize(spread, MathMin(got_a, got_b));
+   for(int i = 0; i < ArraySize(spread); i++)
+      spread[i] = closes_a[i] - closes_b[i];
+
+   ArrayResize(out, max_points);
+   double slice[];
+   ArrayResize(slice, window);
+   for(int i = 0; i < max_points; i++)
+     {
+      for(int j = 0; j < window; j++)
+         slice[j] = spread[i + j];
+      double z = 0.0;
+      if(CalcZScore(slice, window, window, z))
+         out[i] = z;
+      else
+         out[i] = 0.0;
+     }
+
+   return(true);
+}
+
 bool FillDetailGridForSelectedPair(const int data_index, const PairScanConfig &cfg)
 {
    if(data_index < 0 || data_index >= ArraySize(g_pairs_results))
