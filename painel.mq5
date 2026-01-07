@@ -60,6 +60,7 @@ CLabel    g_quotes_page_label;
 CLabel    g_quotes_filter_label;
 CEdit     g_quotes_filter;
 CButton   g_quotes_filter_btn;
+CButton   g_quotes_refresh_btn;
 CButton   g_quotes_sort_btn;
 bool      g_quotes_sort_desc = true;
 string    g_selected_symbols[];
@@ -337,6 +338,7 @@ void SetCotacoesVisible(const bool flag)
    g_quotes_filter_label.Visible(flag);
    g_quotes_filter.Visible(flag);
    g_quotes_filter_btn.Visible(flag);
+   g_quotes_refresh_btn.Visible(flag);
    g_quotes_sort_btn.Visible(flag);
    g_quotes_empty.Visible(flag);
    g_quotes_scroll.Visible(flag);
@@ -489,6 +491,7 @@ bool InitCotacoesTab(const int x, const int y, const int w, const int h)
    const int filter_label_w = 40;
    const int filter_edit_w = 200;
    const int filter_btn_w = 60;
+   const int refresh_btn_w = 80;
    const int filter_gap = 6;
    const int sort_btn_w = 80;
    const int sort_x = g_quotes_x;
@@ -515,6 +518,12 @@ bool InitCotacoesTab(const int x, const int y, const int w, const int h)
       return(false);
    g_quotes_filter_btn.Text("Filtrar");
    g_app.Add(g_quotes_filter_btn);
+
+   const int refresh_x = nav_x - filter_gap - refresh_btn_w;
+   if(!g_quotes_refresh_btn.Create(0, "cot_refresh_btn", 0, refresh_x, y_top, refresh_x + refresh_btn_w, y_top + header_h))
+      return(false);
+   g_quotes_refresh_btn.Text("Atualizar");
+   g_app.Add(g_quotes_refresh_btn);
 
    if(!g_quotes_btn_prev.Create(0, "cot_btn_prev", 0, nav_x, y_top, nav_x + nav_btn_w, y_top + header_h))
       return(false);
@@ -731,6 +740,12 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       else if(s == "cot_filter_btn")
         {
          g_quotes_page = 0;
+         UpdateCotacoesGrid();
+        }
+      else if(s == "cot_refresh_btn")
+        {
+         g_quotes_scroll_pos = 0;
+         g_quotes_scroll.CurrPos(0);
          UpdateCotacoesGrid();
         }
       else if(s == "cot_sort_btn")
