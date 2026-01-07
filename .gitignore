@@ -1,0 +1,5 @@
+*.ex5
+*.log
+*.tmp
+.cache/
+.vscode/
