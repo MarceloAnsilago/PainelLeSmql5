@@ -29,7 +29,7 @@ protected:
 
 CAppDialog g_app;
 CPanel     g_left;
-#define TAB_COUNT 9
+#define TAB_COUNT 8
 #define ACTIONS_TAB 1
 #define COTACOES_TAB 3
 CButton    g_tabs[TAB_COUNT];
@@ -661,8 +661,8 @@ int OnInit()
       return(INIT_FAILED);
    g_app.Add(g_left);
    // Create menu tabs
-   string tabs[TAB_COUNT] = {"  Inicio", "  Acoes", "  Pares", "  Cotacoes", "  Analise", "  Operacoes", "  Faltantes", "  Configuracoes", "  Encerradas"};
-   string icons[TAB_COUNT] = {"H", "A", "P", "C", "L", "O", "F", "S", "E"};
+   string tabs[TAB_COUNT] = {"  Inicio", "  Acoes", "  Pares", "  Cotacoes", "  Analise", "  Operacoes", "  Configuracoes", "  Encerradas"};
+   string icons[TAB_COUNT] = {"H", "A", "P", "C", "L", "O", "S", "E"};
    const int content_x = panel_w + 12;
    const int content_y = 12;
    const int content_w = w - panel_w - 24;
