@@ -939,10 +939,11 @@ void OnDeinit(const int reason)
 
 void OnChartEvent(const int id, const long& l, const double& d, const string& s)
 {
+   if(id == CHARTEVENT_CHART_CHANGE)
+      return;
    if(id == CHARTEVENT_MOUSE_WHEEL)
      {
       ChartSetInteger(0, CHART_MOUSE_SCROLL, false);
-      return;
      }
    if(id == CHARTEVENT_OBJECT_CLICK)
      {
