@@ -60,6 +60,8 @@ CLabel    g_quotes_page_label;
 CLabel    g_quotes_filter_label;
 CEdit     g_quotes_filter;
 CButton   g_quotes_filter_btn;
+CButton   g_quotes_sort_btn;
+bool      g_quotes_sort_desc = true;
 string    g_selected_symbols[];
 string    g_filtered_symbols[];
 int       g_quotes_page = 0;
@@ -313,6 +315,20 @@ int BuildFilteredSymbols()
    return(ArraySize(g_filtered_symbols));
 }
 
+int GetSortedIndex(const int data_pos, const int total)
+{
+   if(total <= 0)
+      return(-1);
+   if(g_quotes_sort_desc)
+      return(data_pos);
+   return((total - 1) - data_pos);
+}
+
+void UpdateSortButtonText()
+{
+   g_quotes_sort_btn.Text(g_quotes_sort_desc ? "Data desc" : "Data asc");
+}
+
 void SetCotacoesVisible(const bool flag)
 {
    g_quotes_btn_prev.Visible(flag);
@@ -321,6 +337,7 @@ void SetCotacoesVisible(const bool flag)
    g_quotes_filter_label.Visible(flag);
    g_quotes_filter.Visible(flag);
    g_quotes_filter_btn.Visible(flag);
+   g_quotes_sort_btn.Visible(flag);
    g_quotes_empty.Visible(flag);
    g_quotes_scroll.Visible(flag);
    g_quotes_date_header.Visible(flag);
@@ -390,7 +407,13 @@ void UpdateCotacoesGrid()
      {
       int data_index = g_quotes_scroll_pos + row;
       if(data_index < got_time)
-         g_quotes_dates[row].Text(TimeToString(times[data_index], TIME_DATE));
+        {
+         const int src = GetSortedIndex(data_index, got_time);
+         if(src >= 0 && src < got_time)
+            g_quotes_dates[row].Text(TimeToString(times[src], TIME_DATE));
+         else
+            g_quotes_dates[row].Text("");
+        }
       else
          g_quotes_dates[row].Text("");
       g_quotes_dates[row].ColorBackground((data_index % 2 == 0) ? g_quotes_row_bg_a : g_quotes_row_bg_b);
@@ -428,7 +451,13 @@ void UpdateCotacoesGrid()
          int data_index = g_quotes_scroll_pos + row;
          int idx = row * g_quotes_cols_per_page + col;
          if(data_index < got)
-            g_quotes_cells[idx].Text(DoubleToString(closes[data_index], digits));
+           {
+            const int src = GetSortedIndex(data_index, got);
+            if(src >= 0 && src < got)
+               g_quotes_cells[idx].Text(DoubleToString(closes[src], digits));
+            else
+               g_quotes_cells[idx].Text("");
+           }
          else
             g_quotes_cells[idx].Text("");
          g_quotes_cells[idx].ColorBackground((data_index % 2 == 0) ? g_quotes_row_bg_a : g_quotes_row_bg_b);
@@ -461,7 +490,14 @@ bool InitCotacoesTab(const int x, const int y, const int w, const int h)
    const int filter_edit_w = 200;
    const int filter_btn_w = 60;
    const int filter_gap = 6;
-   const int filter_x = g_quotes_x;
+   const int sort_btn_w = 80;
+   const int sort_x = g_quotes_x;
+   const int filter_x = sort_x + sort_btn_w + filter_gap;
+
+   if(!g_quotes_sort_btn.Create(0, "cot_sort_btn", 0, sort_x, y_top, sort_x + sort_btn_w, y_top + header_h))
+      return(false);
+   UpdateSortButtonText();
+   g_app.Add(g_quotes_sort_btn);
 
    if(!g_quotes_filter_label.Create(0, "cot_filter_lbl", 0, filter_x, y_top, filter_x + filter_label_w, y_top + header_h))
       return(false);
@@ -695,6 +731,12 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       else if(s == "cot_filter_btn")
         {
          g_quotes_page = 0;
+         UpdateCotacoesGrid();
+        }
+      else if(s == "cot_sort_btn")
+        {
+         g_quotes_sort_desc = !g_quotes_sort_desc;
+         UpdateSortButtonText();
          UpdateCotacoesGrid();
         }
       else if(s == "acoes_btn_all")
