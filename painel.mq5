@@ -770,6 +770,9 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_x = left;
    g_pairs_y = y_top + btn_h + 10;
    const int available_h = h - (g_pairs_y - y) - 12;
+   int grids_h = (int)(available_h * 0.4);
+   if(grids_h < 120)
+      grids_h = 120;
    const int grids_gap = 12;
    const int available_w = w - 24;
    int left_w = (int)(available_w * 0.5);
@@ -782,7 +785,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
          left_w = 160;
      }
    g_pairs_w = left_w - g_pairs_scroll_w - 4;
-   g_pairs_h = available_h;
+   g_pairs_h = grids_h;
    g_pairs_visible_rows = (g_pairs_h - header_h - 6) / (g_pairs_row_h + g_pairs_row_gap);
    if(g_pairs_visible_rows < 1)
       g_pairs_visible_rows = 1;
@@ -858,7 +861,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    g_pairs_detail_x = g_pairs_x + left_w + grids_gap;
    g_pairs_detail_y = g_pairs_y;
    g_pairs_detail_w = right_w - g_pairs_detail_scroll_w - 4;
-   g_pairs_detail_h = available_h;
+   g_pairs_detail_h = grids_h;
    g_pairs_detail_visible_rows = (g_pairs_detail_h - header_h - 6) / (g_pairs_detail_row_h + g_pairs_detail_row_gap);
    if(g_pairs_detail_visible_rows < 1)
       g_pairs_detail_visible_rows = 1;
