@@ -83,6 +83,27 @@ double ScoreCorr(const double corr, const double corr_min)
    return(Clamp01((corr - corr_min) / (1.0 - corr_min)));
 }
 
+double ErfApprox(const double x)
+{
+   // Abramowitz and Stegun 7.1.26 approximation
+   const double a1 = 0.254829592;
+   const double a2 = -0.284496736;
+   const double a3 = 1.421413741;
+   const double a4 = -1.453152027;
+   const double a5 = 1.061405429;
+   const double p = 0.3275911;
+   const double sign = (x < 0.0 ? -1.0 : 1.0);
+   const double ax = MathAbs(x);
+   const double t = 1.0 / (1.0 + p * ax);
+   const double y = 1.0 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * MathExp(-ax * ax));
+   return(sign * y);
+}
+
+double NormalCdf(const double x)
+{
+   return(0.5 * (1.0 + ErfApprox(x / MathSqrt(2.0))));
+}
+
 // Stubs for next metrics.
 bool CalcBetaOLS(const double &prices_a[], const double &prices_b[], const int prices_count, const int window, double &beta)
 {
@@ -171,9 +192,60 @@ bool CalcHalfLife(const double &spread[], const int spread_count, double &half_l
 
 bool CalcADF(const double &spread[], const int spread_count, double &adf_pvalue)
 {
-   // TODO: implement ADF test.
-   adf_pvalue = 0.0;
-   return(false);
+   if(spread_count < 3)
+      return(false);
+
+   const int n = spread_count - 1;
+   double sum_x = 0.0;
+   double sum_y = 0.0;
+   for(int i = 0; i < n; i++)
+     {
+      const double x = spread[i + 1];
+      const double y = spread[i] - spread[i + 1];
+      sum_x += x;
+      sum_y += y;
+     }
+   const double mean_x = sum_x / n;
+   const double mean_y = sum_y / n;
+
+   double sum_xx = 0.0;
+   double sum_xy = 0.0;
+   for(int i = 0; i < n; i++)
+     {
+      const double x = spread[i + 1];
+      const double y = spread[i] - spread[i + 1];
+      const double dx = x - mean_x;
+      const double dy = y - mean_y;
+      sum_xx += dx * dx;
+      sum_xy += dx * dy;
+     }
+   if(sum_xx <= 0.0)
+      return(false);
+
+   const double b = sum_xy / sum_xx;
+   const double a = mean_y - b * mean_x;
+
+   double rss = 0.0;
+   for(int i = 0; i < n; i++)
+     {
+      const double x = spread[i + 1];
+      const double y = spread[i] - spread[i + 1];
+      const double y_hat = a + b * x;
+      const double e = y - y_hat;
+      rss += e * e;
+     }
+   if(n <= 2)
+      return(false);
+   const double s2 = rss / (n - 2);
+   if(s2 <= 0.0)
+      return(false);
+   const double se_b = MathSqrt(s2 / sum_xx);
+   if(se_b <= 0.0)
+      return(false);
+
+   const double t_stat = b / se_b;
+   adf_pvalue = NormalCdf(t_stat);
+   return(true);
 }
 
 #endif // __LONGSHORTMETRICS_MQH__

@@ -1252,7 +1252,7 @@ bool InitConfigTab(const int x, const int y, const int w, const int h)
 
    if(!g_cfg_half_input.Create(0, "cfg_half", 0, left_x, y_cursor, left_x + col_w, y_cursor + input_h))
       return(false);
-   g_cfg_half_input.Text("5,0");
+   g_cfg_half_input.Text("20,0");
    g_app.Add(g_cfg_half_input);
 
    y_cursor += input_h + 6;
