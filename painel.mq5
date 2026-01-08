@@ -37,20 +37,14 @@ CLabel g_sell_label;
 CEdit  g_sell_input;
 CLabel g_buy_label;
 CEdit  g_buy_input;
-CLabel g_strategy_label;
-CEdit  g_strategy_input;
-CLabel g_follow_label;
-CEdit  g_follow_input;
+CPanel g_summary_card;
+CLabel g_summary_title;
+CLabel g_summary_line1;
+CLabel g_summary_line2;
+CLabel g_summary_line3;
 
 CButton g_submit_btn;
 CButton g_clear_btn;
-CLabel  g_status_label;
-
-void SetStatus(const string text, const color c)
-{
-   g_status_label.Text(text);
-   g_status_label.Color(c);
-}
 
 bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
 {
@@ -68,7 +62,6 @@ bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
    if(!SymbolSelect(sym, true))
      {
       price_out.Text("--");
-      SetStatus("Simbolo nao encontrado: " + sym, clrRed);
       return(false);
      }
 
@@ -109,9 +102,67 @@ void UpdateTotal(CLabel &price_label, CEdit &qty_field, CLabel &total_out)
    if(!TryParseDouble(price_label.Text(), price) || !TryParseDouble(qty_field.Text(), qty))
      {
       total_out.Text("--");
+      UpdateSummary();
       return;
      }
    total_out.Text(FormatMoney(price * qty, 2));
+   UpdateSummary();
+}
+
+void UpdateSummary()
+{
+   double sell_qty = 0.0;
+   double buy_qty = 0.0;
+   double sell_total = 0.0;
+   double buy_total = 0.0;
+   bool has_sell = TryParseDouble(g_sell_qty_input.Text(), sell_qty);
+   bool has_buy = TryParseDouble(g_buy_qty_input.Text(), buy_qty);
+   bool has_sell_total = TryParseDouble(g_sell_total_value.Text(), sell_total);
+   bool has_buy_total = TryParseDouble(g_buy_total_value.Text(), buy_total);
+
+   string sell_sym = g_sell_input.Text();
+   StringTrimLeft(sell_sym);
+   StringTrimRight(sell_sym);
+   StringToUpper(sell_sym);
+   if(sell_sym == "")
+      sell_sym = "--";
+
+   string buy_sym = g_buy_input.Text();
+   StringTrimLeft(buy_sym);
+   StringTrimRight(buy_sym);
+   StringToUpper(buy_sym);
+   if(buy_sym == "")
+      buy_sym = "--";
+
+   if(has_sell)
+      g_summary_line1.Text("Vendeu " + sell_sym + ": " + DoubleToString(sell_qty, 0));
+   else
+      g_summary_line1.Text("Vendeu " + sell_sym + ": --");
+
+   if(has_buy)
+      g_summary_line2.Text("Comprou " + buy_sym + ": " + DoubleToString(buy_qty, 0));
+   else
+      g_summary_line2.Text("Comprou " + buy_sym + ": --");
+
+   if(has_sell_total && has_buy_total)
+     {
+      double net = sell_total - buy_total;
+      if(net >= 0.0)
+        {
+         g_summary_line3.Text("Recebe: " + FormatMoney(net, 2));
+         g_summary_line3.Color(clrBlue);
+        }
+      else
+        {
+         g_summary_line3.Text("Paga: " + FormatMoney(MathAbs(net), 2));
+         g_summary_line3.Color(clrRed);
+        }
+     }
+   else
+     {
+      g_summary_line3.Text("Recebe/Paga: --");
+      g_summary_line3.Color(clrGray);
+     }
 }
 
 void UpdateQtyByDelta(CEdit &qty_field, const double delta)
@@ -129,7 +180,7 @@ bool InitBoleta(const int w, const int h)
 {
    const int pad = 20;
    const int card_w = MathMin(w - (pad * 2), 520);
-   const int card_h = 400;
+   const int card_h = 440;
    int card_x = (w - card_w) / 2;
    int card_y = (h - card_h) / 2;
    if(card_x < pad)
@@ -158,7 +209,7 @@ bool InitBoleta(const int w, const int h)
    y += 22;
    if(!g_subtitle.Create(0, "boleta_subtitle", 0, left, y, right, y + 18))
       return(false);
-   g_subtitle.Text("Ativo vendido, ativo comprado, quantidade e estrategia");
+   g_subtitle.Text("Ativo vendido, ativo comprado e quantidade");
    g_subtitle.Color(clrGray);
    g_subtitle.ColorBackground(clrWhite);
    g_subtitle.ColorBorder(clrWhite);
@@ -167,7 +218,6 @@ bool InitBoleta(const int w, const int h)
    y += 28;
    const int label_w = 140;
    const int input_h = 22;
-   const int row_gap = 8;
 
    const int card_gap = 12;
    const int asset_card_w = (card_w - 32 - card_gap) / 2;
@@ -336,32 +386,43 @@ bool InitBoleta(const int w, const int h)
    g_app.Add(g_buy_total_value);
 
    y += asset_card_h + 8;
-   if(!g_strategy_label.Create(0, "strategy_label", 0, left, y, left + label_w, y + input_h))
+   const int summary_h = 84;
+   if(!g_summary_card.Create(0, "summary_card", 0, left, y, right, y + summary_h))
       return(false);
-   g_strategy_label.Text("Estrategia");
-   g_strategy_label.ColorBackground(clrWhite);
-   g_strategy_label.ColorBorder(clrWhite);
-   g_app.Add(g_strategy_label);
+   g_summary_card.ColorBackground(clrWhite);
+   g_summary_card.ColorBorder(clrSilver);
+   g_app.Add(g_summary_card);
 
-   if(!g_strategy_input.Create(0, "strategy_input", 0, left + label_w + 8, y, right, y + input_h))
+   if(!g_summary_title.Create(0, "summary_title", 0, left + 10, y + 6, right - 10, y + 24))
       return(false);
-   g_strategy_input.Text("");
-   g_app.Add(g_strategy_input);
+   g_summary_title.Text("Resumo Long/Short");
+   g_summary_title.ColorBackground(clrWhite);
+   g_summary_title.ColorBorder(clrWhite);
+   g_app.Add(g_summary_title);
 
-   y += input_h + row_gap;
-   if(!g_follow_label.Create(0, "follow_label", 0, left, y, left + label_w, y + input_h))
+   if(!g_summary_line1.Create(0, "summary_line1", 0, left + 10, y + 26, right - 10, y + 44))
       return(false);
-   g_follow_label.Text("Acompanhamento");
-   g_follow_label.ColorBackground(clrWhite);
-   g_follow_label.ColorBorder(clrWhite);
-   g_app.Add(g_follow_label);
+   g_summary_line1.Text("Vendeu: --");
+   g_summary_line1.ColorBackground(clrWhite);
+   g_summary_line1.ColorBorder(clrWhite);
+   g_app.Add(g_summary_line1);
 
-   if(!g_follow_input.Create(0, "follow_input", 0, left + label_w + 8, y, right, y + input_h))
+   if(!g_summary_line2.Create(0, "summary_line2", 0, left + 10, y + 44, right - 10, y + 62))
       return(false);
-   g_follow_input.Text("");
-   g_app.Add(g_follow_input);
+   g_summary_line2.Text("Comprou: --");
+   g_summary_line2.ColorBackground(clrWhite);
+   g_summary_line2.ColorBorder(clrWhite);
+   g_app.Add(g_summary_line2);
 
-   y += input_h + 14;
+   if(!g_summary_line3.Create(0, "summary_line3", 0, left + 10, y + 62, right - 10, y + 80))
+      return(false);
+   g_summary_line3.Text("Recebe/Paga: --");
+   g_summary_line3.Color(clrGray);
+   g_summary_line3.ColorBackground(clrWhite);
+   g_summary_line3.ColorBorder(clrWhite);
+   g_app.Add(g_summary_line3);
+
+   y += summary_h + 14;
    const int btn_action_w = 120;
    if(!g_submit_btn.Create(0, "btn_submit", 0, right - (btn_action_w * 2 + 8), y, right - btn_action_w - 8, y + 26))
       return(false);
@@ -372,14 +433,6 @@ bool InitBoleta(const int w, const int h)
       return(false);
    g_clear_btn.Text("Limpar");
    g_app.Add(g_clear_btn);
-
-   y += 34;
-   if(!g_status_label.Create(0, "status_label", 0, left, y, right, y + 18))
-      return(false);
-   g_status_label.Text("Pronto para iniciar.");
-   g_status_label.ColorBackground(clrWhite);
-   g_status_label.ColorBorder(clrWhite);
-   g_app.Add(g_status_label);
 
    return(true);
 }
@@ -436,13 +489,11 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       g_buy_input.Text("");
       g_sell_qty_input.Text("");
       g_buy_qty_input.Text("");
-      g_strategy_input.Text("");
-      g_follow_input.Text("");
       g_sell_price_value.Text("--");
       g_buy_price_value.Text("--");
       g_sell_total_value.Text("--");
       g_buy_total_value.Text("--");
-      SetStatus("Campos limpos.", clrGray);
+      UpdateSummary();
      }
    else if(s == "sell_qty_up")
      {
@@ -463,10 +514,6 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
      {
       UpdateQtyByDelta(g_buy_qty_input, -100.0);
       UpdateTotal(g_buy_price_value, g_buy_qty_input, g_buy_total_value);
-     }
-   else if(s == "btn_submit")
-     {
-      SetStatus("Entrada registrada (simulacao).", clrDarkGreen);
      }
 }
 
