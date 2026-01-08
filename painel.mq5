@@ -874,7 +874,7 @@ void DrawZScoreChart(const double &zvals[], const int total, const string title)
    for(int i = 0; i < dots_total; i++)
      {
       const int x = plot_x1 + (int)((double)i * (plot_x2 - plot_x1) / (double)(dots_total - 1));
-      const double val = zvals[total - 1 - i];
+      const double val = zvals[i];
       double clamped_val = MathMax(-max_abs, MathMin(max_abs, val));
       int y = plot_y1 + (int)(((max_v - clamped_val) / range) * (plot_y2 - plot_y1));
       y = MathMax(plot_y1, MathMin(plot_y2, y));
