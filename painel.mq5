@@ -78,7 +78,7 @@ bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
    else
       price = SymbolInfoDouble(sym, SYMBOL_BID);
    int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-   price_out.Text(DoubleToString(price, digits));
+   price_out.Text(FormatMoney(price, digits));
    return(true);
 }
 
@@ -87,10 +87,19 @@ bool TryParseDouble(const string text, double &out)
    string t = text;
    StringTrimLeft(t);
    StringTrimRight(t);
+   StringReplace(t, "R$", "");
+   StringReplace(t, " ", "");
+   StringTrimLeft(t);
+   StringTrimRight(t);
    if(t == "")
       return(false);
    out = StringToDouble(t);
    return(true);
+}
+
+string FormatMoney(const double value, const int digits)
+{
+   return(StringFormat("R$ %.*f", digits, value));
 }
 
 void UpdateTotal(CLabel &price_label, CEdit &qty_field, CLabel &total_out)
@@ -102,7 +111,7 @@ void UpdateTotal(CLabel &price_label, CEdit &qty_field, CLabel &total_out)
       total_out.Text("--");
       return;
      }
-   total_out.Text(DoubleToString(price * qty, 2));
+   total_out.Text(FormatMoney(price * qty, 2));
 }
 
 void UpdateQtyByDelta(CEdit &qty_field, const double delta)
@@ -120,7 +129,7 @@ bool InitBoleta(const int w, const int h)
 {
    const int pad = 20;
    const int card_w = MathMin(w - (pad * 2), 520);
-   const int card_h = 360;
+   const int card_h = 400;
    int card_x = (w - card_w) / 2;
    int card_y = (h - card_h) / 2;
    if(card_x < pad)
@@ -162,7 +171,7 @@ bool InitBoleta(const int w, const int h)
 
    const int card_gap = 12;
    const int asset_card_w = (card_w - 32 - card_gap) / 2;
-   const int asset_card_h = 150;
+   const int asset_card_h = 180;
    const int sell_x1 = left;
    const int sell_x2 = left + asset_card_w;
    const int buy_x1 = sell_x2 + card_gap;
@@ -297,36 +306,36 @@ bool InitBoleta(const int w, const int h)
    g_buy_price_value.ColorBorder(clrWhite);
    g_app.Add(g_buy_price_value);
 
-   y += asset_card_h + 8;
-   if(!g_sell_total_label.Create(0, "sell_total_label", 0, sell_x1 + 10, y, sell_x1 + label_w, y + input_h))
+   const int total_row_y = y + 150;
+   if(!g_sell_total_label.Create(0, "sell_total_label", 0, sell_x1 + 10, total_row_y, sell_x1 + label_w, total_row_y + input_h))
       return(false);
    g_sell_total_label.Text("Total venda");
    g_sell_total_label.ColorBackground(clrWhite);
    g_sell_total_label.ColorBorder(clrWhite);
    g_app.Add(g_sell_total_label);
 
-   if(!g_sell_total_value.Create(0, "sell_total_value", 0, sell_x1 + 100, y, sell_x2 - 10, y + input_h))
+   if(!g_sell_total_value.Create(0, "sell_total_value", 0, sell_x1 + 100, total_row_y, sell_x2 - 10, total_row_y + input_h))
       return(false);
    g_sell_total_value.Text("--");
    g_sell_total_value.ColorBackground(clrWhite);
    g_sell_total_value.ColorBorder(clrWhite);
    g_app.Add(g_sell_total_value);
 
-   if(!g_buy_total_label.Create(0, "buy_total_label", 0, buy_x1 + 10, y, buy_x1 + label_w, y + input_h))
+   if(!g_buy_total_label.Create(0, "buy_total_label", 0, buy_x1 + 10, total_row_y, buy_x1 + label_w, total_row_y + input_h))
       return(false);
    g_buy_total_label.Text("Total compra");
    g_buy_total_label.ColorBackground(clrWhite);
    g_buy_total_label.ColorBorder(clrWhite);
    g_app.Add(g_buy_total_label);
 
-   if(!g_buy_total_value.Create(0, "buy_total_value", 0, buy_x1 + 100, y, buy_x2 - 10, y + input_h))
+   if(!g_buy_total_value.Create(0, "buy_total_value", 0, buy_x1 + 100, total_row_y, buy_x2 - 10, total_row_y + input_h))
       return(false);
    g_buy_total_value.Text("--");
    g_buy_total_value.ColorBackground(clrWhite);
    g_buy_total_value.ColorBorder(clrWhite);
    g_app.Add(g_buy_total_value);
 
-   y += input_h + row_gap;
+   y += asset_card_h + 8;
    if(!g_strategy_label.Create(0, "strategy_label", 0, left, y, left + label_w, y + input_h))
       return(false);
    g_strategy_label.Text("Estrategia");
@@ -460,3 +469,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       SetStatus("Entrada registrada (simulacao).", clrDarkGreen);
      }
 }
+
+
+
+
