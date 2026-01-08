@@ -6,8 +6,15 @@
 #include <Controls/Label.mqh>
 #include <Controls/Edit.mqh>
 #include <Controls/Button.mqh>
+#include <Trade/Trade.mqh>
+
+input int    InpDeviationPoints = 5;
+input int    InpMagic           = 50101;
+input string InpComment         = "LongShort";
+input int    InpLotMultiple     = 100;
 
 CAppDialog g_app;
+CTrade g_trade;
 CPanel g_card;
 CLabel g_title;
 CLabel g_subtitle;
@@ -43,15 +50,15 @@ CLabel g_summary_line1;
 CLabel g_summary_line2;
 CLabel g_summary_line3;
 
+ulong g_sell_ticket = 0;
+ulong g_buy_ticket = 0;
+
 CButton g_submit_btn;
 CButton g_clear_btn;
 
 bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
 {
-   string sym = field.Text();
-   StringTrimLeft(sym);
-   StringTrimRight(sym);
-   StringToUpper(sym);
+   string sym = NormalizeSymbol(field.Text());
    field.Text(sym);
    if(sym == "")
      {
@@ -95,6 +102,199 @@ string FormatMoney(const double value, const int digits)
    return(StringFormat("R$ %.*f", digits, value));
 }
 
+string NormalizeSymbol(const string text)
+{
+   string s = text;
+   StringTrimLeft(s);
+   StringTrimRight(s);
+   StringToUpper(s);
+   return(s);
+}
+
+bool ValidateSymbol(const string sym, string &err)
+{
+   if(sym == "")
+     {
+      err = "Simbolo vazio.";
+      return(false);
+     }
+   if(!SymbolSelect(sym, true))
+     {
+      err = "Simbolo nao encontrado: " + sym;
+      return(false);
+     }
+   return(true);
+}
+
+bool ValidateVolume(const string sym, const double volume, string &err)
+{
+   if(volume <= 0.0)
+     {
+      err = "Quantidade invalida.";
+      return(false);
+     }
+   if(InpLotMultiple > 0)
+     {
+      int vol_int = (int)MathRound(volume);
+      if(vol_int % InpLotMultiple != 0)
+        {
+         err = "Quantidade deve ser multiplo de " + IntegerToString(InpLotMultiple) + ".";
+         return(false);
+        }
+     }
+   double vmin = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+   double vmax = SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX);
+   double vstep = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+   if(volume < vmin || volume > vmax)
+     {
+      err = "Quantidade fora dos limites do ativo.";
+      return(false);
+     }
+   if(vstep > 0.0)
+     {
+      double steps = volume / vstep;
+      if(MathAbs(steps - MathRound(steps)) > 1e-6)
+        {
+         err = "Quantidade fora do passo do ativo.";
+         return(false);
+        }
+     }
+   return(true);
+}
+
+bool CheckLiquidity(const string sym, const double volume, const bool is_buy, string &err)
+{
+   if(!MarketBookAdd(sym))
+     {
+      err = "Book indisponivel: " + sym;
+      return(false);
+     }
+   MqlBookInfo book[];
+   if(!MarketBookGet(sym, book) || ArraySize(book) == 0)
+     {
+      err = "Sem book para: " + sym;
+      return(false);
+     }
+   double available = 0.0;
+   for(int i = 0; i < ArraySize(book); i++)
+     {
+      if(is_buy && book[i].type == BOOK_TYPE_SELL)
+         available += (double)book[i].volume;
+      else if(!is_buy && book[i].type == BOOK_TYPE_BUY)
+         available += (double)book[i].volume;
+     }
+   if(available < volume)
+     {
+      err = "Liquidez insuficiente: " + sym;
+      return(false);
+     }
+   return(true);
+}
+
+bool CheckOrder(const string sym, const double volume, const bool is_buy, string &err)
+{
+   MqlTradeRequest req;
+   MqlTradeCheckResult check;
+   ZeroMemory(req);
+   ZeroMemory(check);
+
+   double price = is_buy ? SymbolInfoDouble(sym, SYMBOL_ASK) : SymbolInfoDouble(sym, SYMBOL_BID);
+   if(price <= 0.0)
+     {
+      err = "Preco indisponivel: " + sym;
+      return(false);
+     }
+
+   req.action = TRADE_ACTION_DEAL;
+   req.symbol = sym;
+   req.volume = volume;
+   req.type = is_buy ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   req.price = price;
+   req.deviation = InpDeviationPoints;
+   req.type_filling = ORDER_FILLING_FOK;
+   req.type_time = ORDER_TIME_GTC;
+   req.magic = InpMagic;
+   req.comment = InpComment;
+
+   if(!OrderCheck(req, check))
+     {
+      err = "OrderCheck falhou: " + sym;
+      return(false);
+     }
+   if(check.retcode != TRADE_RETCODE_DONE && check.retcode != TRADE_RETCODE_PLACED)
+     {
+      err = "OrderCheck rejeitado: " + check.comment;
+      return(false);
+     }
+   return(true);
+}
+
+bool SendMarketOrder(const string sym, const double volume, const bool is_buy, ulong &ticket, string &err)
+{
+   g_trade.SetExpertMagicNumber(InpMagic);
+   g_trade.SetDeviationInPoints(InpDeviationPoints);
+   g_trade.SetTypeFilling(ORDER_FILLING_FOK);
+
+   bool ok = is_buy ? g_trade.Buy(volume, sym, 0.0, 0.0, 0.0, InpComment)
+                    : g_trade.Sell(volume, sym, 0.0, 0.0, 0.0, InpComment);
+   if(!ok)
+     {
+      err = g_trade.ResultRetcodeDescription();
+      return(false);
+     }
+   ticket = g_trade.ResultOrder();
+   return(true);
+}
+
+void SubmitOrders()
+{
+   string sell_sym = NormalizeSymbol(g_sell_input.Text());
+   string buy_sym = NormalizeSymbol(g_buy_input.Text());
+
+   double sell_qty = 0.0;
+   double buy_qty = 0.0;
+   if(!TryParseDouble(g_sell_qty_input.Text(), sell_qty) || !TryParseDouble(g_buy_qty_input.Text(), buy_qty))
+     {
+      Print("Quantidade invalida.");
+      return;
+     }
+
+   string err;
+   if(!ValidateSymbol(sell_sym, err) || !ValidateSymbol(buy_sym, err))
+     {
+      Print(err);
+      return;
+     }
+   if(!ValidateVolume(sell_sym, sell_qty, err) || !ValidateVolume(buy_sym, buy_qty, err))
+     {
+      Print(err);
+      return;
+     }
+   if(!CheckLiquidity(sell_sym, sell_qty, false, err) || !CheckLiquidity(buy_sym, buy_qty, true, err))
+     {
+      Print(err);
+      return;
+     }
+   if(!CheckOrder(sell_sym, sell_qty, false, err) || !CheckOrder(buy_sym, buy_qty, true, err))
+     {
+      Print(err);
+      return;
+     }
+
+   g_sell_ticket = 0;
+   g_buy_ticket = 0;
+   if(!SendMarketOrder(sell_sym, sell_qty, false, g_sell_ticket, err))
+     {
+      Print("Falha venda: " + err);
+      return;
+     }
+   if(!SendMarketOrder(buy_sym, buy_qty, true, g_buy_ticket, err))
+     {
+      Print("Falha compra: " + err);
+      return;
+     }
+}
+
 void UpdateTotal(CLabel &price_label, CEdit &qty_field, CLabel &total_out)
 {
    double price = 0.0;
@@ -120,17 +320,11 @@ void UpdateSummary()
    bool has_sell_total = TryParseDouble(g_sell_total_value.Text(), sell_total);
    bool has_buy_total = TryParseDouble(g_buy_total_value.Text(), buy_total);
 
-   string sell_sym = g_sell_input.Text();
-   StringTrimLeft(sell_sym);
-   StringTrimRight(sell_sym);
-   StringToUpper(sell_sym);
+   string sell_sym = NormalizeSymbol(g_sell_input.Text());
    if(sell_sym == "")
       sell_sym = "--";
 
-   string buy_sym = g_buy_input.Text();
-   StringTrimLeft(buy_sym);
-   StringTrimRight(buy_sym);
-   StringToUpper(buy_sym);
+   string buy_sym = NormalizeSymbol(g_buy_input.Text());
    if(buy_sym == "")
       buy_sym = "--";
 
@@ -468,11 +662,13 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
         {
          if(UpdateSymbolPrice(g_sell_input, g_sell_price_value, false))
             UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
+         UpdateSummary();
         }
       else if(s == "buy_input")
         {
          if(UpdateSymbolPrice(g_buy_input, g_buy_price_value, true))
             UpdateTotal(g_buy_price_value, g_buy_qty_input, g_buy_total_value);
+         UpdateSummary();
         }
       else if(s == "sell_qty_input")
          UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
@@ -514,6 +710,10 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
      {
       UpdateQtyByDelta(g_buy_qty_input, -100.0);
       UpdateTotal(g_buy_price_value, g_buy_qty_input, g_buy_total_value);
+     }
+   else if(s == "btn_submit")
+     {
+      SubmitOrders();
      }
 }
 
