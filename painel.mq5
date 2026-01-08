@@ -178,6 +178,20 @@ CLabel    g_pairs_z_title;
 CPanel    g_pairs_z_bg;
 CEdit     g_pairs_z_dots[];
 CPanel    g_pairs_z_line_dots[];
+CPanel    g_pairs_z_line_zero;
+CPanel    g_pairs_z_line_p2;
+CPanel    g_pairs_z_line_m2;
+CPanel    g_pairs_z_dots_p3[];
+CPanel    g_pairs_z_dots_m3[];
+const color Z_BLUE   = (color)0xD77800; // RGB #0078D7 in BGR
+const color Z_GRAY   = (color)0xC8C8C8;
+const color Z_RED    = (color)0x0000FF; // red in BGR (RGB 255,0,0)
+const color Z_ORANGE = (color)0x00A5FF; // orange in BGR (RGB 255,165,0)
+CLabel    g_pairs_z_lbl_p3;
+CLabel    g_pairs_z_lbl_p2;
+CLabel    g_pairs_z_lbl_zero;
+CLabel    g_pairs_z_lbl_m2;
+CLabel    g_pairs_z_lbl_m3;
 int       g_pairs_z_max_points = 120;
 int       g_pairs_z_line_max = 2000;
 int       g_pairs_z_x = 0;
@@ -480,6 +494,18 @@ void SetParesVisible(const bool flag)
       g_pairs_z_dots[i].Visible(flag);
    for(int i = 0; i < ArraySize(g_pairs_z_line_dots); i++)
       g_pairs_z_line_dots[i].Visible(flag);
+   g_pairs_z_line_zero.Visible(flag);
+   g_pairs_z_line_p2.Visible(flag);
+   g_pairs_z_line_m2.Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_z_dots_p3); i++)
+      g_pairs_z_dots_p3[i].Visible(flag);
+   for(int i = 0; i < ArraySize(g_pairs_z_dots_m3); i++)
+      g_pairs_z_dots_m3[i].Visible(flag);
+   g_pairs_z_lbl_p3.Visible(flag);
+   g_pairs_z_lbl_p2.Visible(flag);
+   g_pairs_z_lbl_zero.Visible(flag);
+   g_pairs_z_lbl_m2.Visible(flag);
+   g_pairs_z_lbl_m3.Visible(flag);
    g_pairs_empty.Visible(flag);
    g_pairs_scroll.Visible(flag);
    for(int i = 0; i < ArraySize(g_pairs_headers); i++)
@@ -733,6 +759,18 @@ void DrawZScoreChart(const double &zvals[], const int total, const string title)
          g_pairs_z_dots[i].Visible(false);
       for(int i = 0; i < ArraySize(g_pairs_z_line_dots); i++)
          g_pairs_z_line_dots[i].Visible(false);
+      g_pairs_z_line_zero.Visible(false);
+      g_pairs_z_line_p2.Visible(false);
+      g_pairs_z_line_m2.Visible(false);
+      for(int i = 0; i < ArraySize(g_pairs_z_dots_p3); i++)
+         g_pairs_z_dots_p3[i].Visible(false);
+      for(int i = 0; i < ArraySize(g_pairs_z_dots_m3); i++)
+         g_pairs_z_dots_m3[i].Visible(false);
+      g_pairs_z_lbl_p3.Visible(false);
+      g_pairs_z_lbl_p2.Visible(false);
+      g_pairs_z_lbl_zero.Visible(false);
+      g_pairs_z_lbl_m2.Visible(false);
+      g_pairs_z_lbl_m3.Visible(false);
       g_pairs_z_title.Text(title);
       return;
      }
@@ -746,21 +784,86 @@ void DrawZScoreChart(const double &zvals[], const int total, const string title)
       if(zvals[i] > max_v)
          max_v = zvals[i];
      }
-   if(min_v > 0.0)
-      min_v = 0.0;
-   if(max_v < 0.0)
-      max_v = 0.0;
-   if(MathAbs(max_v - min_v) < 1e-6)
-     {
-      max_v = min_v + 1.0;
-      min_v -= 1.0;
-     }
 
-   const int plot_x1 = g_pairs_z_x + pad;
-   const int plot_y1 = g_pairs_z_y + pad;
-   const int plot_x2 = g_pairs_z_x + w - pad - 1;
-   const int plot_y2 = g_pairs_z_y + h - pad - 1;
+   // Fixed symmetric scale around zero (-3..+3).
+   const double max_abs = 3.0;
+   min_v = -max_abs;
+   max_v = max_abs;
    const double range = max_v - min_v;
+
+   const int margin_y = 14;
+   const int plot_x1 = g_pairs_z_x + pad;
+   const int plot_y1 = g_pairs_z_y + pad + margin_y;
+   const int plot_x2 = g_pairs_z_x + w - pad - 1;
+   const int plot_y2 = g_pairs_z_y + h - pad - 1 - margin_y;
+   const int line_h = 2;
+
+   const int y_zero = plot_y1 + (int)(((max_v - 0.0) / range) * (plot_y2 - plot_y1));
+   const int y_p2 = plot_y1 + (int)(((max_v - 2.0) / range) * (plot_y2 - plot_y1));
+   const int y_m2 = plot_y1 + (int)(((max_v - -2.0) / range) * (plot_y2 - plot_y1));
+   const int y_p3 = plot_y1 + (int)(((max_v - 3.0) / range) * (plot_y2 - plot_y1));
+   const int y_m3 = plot_y1 + (int)(((max_v - -3.0) / range) * (plot_y2 - plot_y1));
+
+   const int y_zero_clamped = MathMax(plot_y1 + line_h / 2, MathMin(plot_y2 - line_h / 2, y_zero));
+   const int y_p2_clamped = MathMax(plot_y1 + line_h / 2, MathMin(plot_y2 - line_h / 2, y_p2));
+   const int y_m2_clamped = MathMax(plot_y1 + line_h / 2, MathMin(plot_y2 - line_h / 2, y_m2));
+   const int y_p3_clamped = MathMax(plot_y1 + line_h / 2, MathMin(plot_y2 - line_h / 2, y_p3));
+   const int y_m3_clamped = MathMax(plot_y1 + line_h / 2, MathMin(plot_y2 - line_h / 2, y_m3));
+
+   const int label_w = 24;
+   const int label_h = 14;
+   const int label_x = plot_x1 + 2;
+   g_pairs_z_lbl_p3.Move(label_x, y_p3_clamped - label_h / 2);
+   g_pairs_z_lbl_p3.Size(label_w, label_h);
+   g_pairs_z_lbl_p3.Visible(true);
+   g_pairs_z_lbl_p2.Move(label_x, y_p2_clamped - label_h / 2);
+   g_pairs_z_lbl_p2.Size(label_w, label_h);
+   g_pairs_z_lbl_p2.Visible(true);
+   g_pairs_z_lbl_zero.Move(label_x, y_zero_clamped - label_h / 2);
+   g_pairs_z_lbl_zero.Size(label_w, label_h);
+   g_pairs_z_lbl_zero.Visible(true);
+   g_pairs_z_lbl_m2.Move(label_x, y_m2_clamped - label_h / 2);
+   g_pairs_z_lbl_m2.Size(label_w, label_h);
+   g_pairs_z_lbl_m2.Visible(true);
+   g_pairs_z_lbl_m3.Move(label_x, y_m3_clamped - label_h / 2);
+   g_pairs_z_lbl_m3.Size(label_w, label_h);
+   g_pairs_z_lbl_m3.Visible(true);
+
+   g_pairs_z_line_zero.Move(plot_x1, y_zero_clamped - line_h / 2);
+   g_pairs_z_line_zero.Size(plot_x2 - plot_x1, line_h);
+   g_pairs_z_line_zero.Visible(true);
+
+   g_pairs_z_line_p2.Move(plot_x1, y_p2_clamped - line_h / 2);
+   g_pairs_z_line_p2.Size(plot_x2 - plot_x1, line_h);
+   g_pairs_z_line_p2.Visible(true);
+
+   g_pairs_z_line_m2.Move(plot_x1, y_m2_clamped - line_h / 2);
+   g_pairs_z_line_m2.Size(plot_x2 - plot_x1, line_h);
+   g_pairs_z_line_m2.Visible(true);
+
+   const int dotted_h = 2;
+   const int dotted_gap = 10;
+   int dotted_idx = 0;
+   for(int x = plot_x1; x <= plot_x2 && dotted_idx < ArraySize(g_pairs_z_dots_p3); x += dotted_gap)
+     {
+      g_pairs_z_dots_p3[dotted_idx].Move(x, y_p3_clamped - dotted_h / 2);
+      g_pairs_z_dots_p3[dotted_idx].Size(3, dotted_h);
+      g_pairs_z_dots_p3[dotted_idx].Visible(true);
+      dotted_idx++;
+     }
+   for(int i = dotted_idx; i < ArraySize(g_pairs_z_dots_p3); i++)
+      g_pairs_z_dots_p3[i].Visible(false);
+
+   dotted_idx = 0;
+   for(int x = plot_x1; x <= plot_x2 && dotted_idx < ArraySize(g_pairs_z_dots_m3); x += dotted_gap)
+     {
+      g_pairs_z_dots_m3[dotted_idx].Move(x, y_m3_clamped - dotted_h / 2);
+      g_pairs_z_dots_m3[dotted_idx].Size(3, dotted_h);
+      g_pairs_z_dots_m3[dotted_idx].Visible(true);
+      dotted_idx++;
+     }
+   for(int i = dotted_idx; i < ArraySize(g_pairs_z_dots_m3); i++)
+      g_pairs_z_dots_m3[i].Visible(false);
    const int dot = 6;
    const int dots_total = MathMin(total, ArraySize(g_pairs_z_dots));
    int xs[];
@@ -772,7 +875,9 @@ void DrawZScoreChart(const double &zvals[], const int total, const string title)
      {
       const int x = plot_x1 + (int)((double)i * (plot_x2 - plot_x1) / (double)(dots_total - 1));
       const double val = zvals[total - 1 - i];
-      const int y = plot_y1 + (int)(((max_v - val) / range) * (plot_y2 - plot_y1));
+      double clamped_val = MathMax(-max_abs, MathMin(max_abs, val));
+      int y = plot_y1 + (int)(((max_v - clamped_val) / range) * (plot_y2 - plot_y1));
+      y = MathMax(plot_y1, MathMin(plot_y2, y));
       xs[i] = x;
       ys[i] = y;
       g_pairs_z_dots[i].Move(x - dot / 2, y - dot / 2);
@@ -808,7 +913,8 @@ void DrawZScoreChart(const double &zvals[], const int total, const string title)
      }
    for(int i = line_count; i < ArraySize(g_pairs_z_line_dots); i++)
       g_pairs_z_line_dots[i].Visible(false);
-   g_pairs_z_title.Text(title);
+   const double last = zvals[total - 1];
+   g_pairs_z_title.Text(title + " | last=" + DoubleToString(last, 2));
    ChartRedraw(0);
 }
 
@@ -830,6 +936,8 @@ void UpdateZScoreChartForDetailRow(const int detail_index)
       return;
      }
 
+   const double last = (ArraySize(zvals) > 0 ? zvals[ArraySize(zvals) - 1] : 0.0);
+   PrintFormat("Z DEBUG: %s/%s win=%d total=%d last=%.4f", base.sym_a, base.sym_b, window, ArraySize(zvals), last);
    DrawZScoreChart(zvals, ArraySize(zvals), "Z-score " + base.sym_a + "/" + base.sym_b + " | janela " + IntegerToString(window));
 }
 
@@ -1091,11 +1199,107 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
    if(g_pairs_z_h < 40)
       g_pairs_z_h = 40;
    g_pairs_z_y = g_pairs_z_y + z_title_h + 4;
+   g_pairs_z_y -= 50;
+   const int min_z_y = g_pairs_y + grids_h + bottom_gap;
+   if(g_pairs_z_y < min_z_y)
+      g_pairs_z_y = min_z_y;
    if(!g_pairs_z_bg.Create(0, "pairs_z_bg", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + g_pairs_z_h))
       return(false);
    g_pairs_z_bg.ColorBackground(clrWhite);
    g_pairs_z_bg.ColorBorder((color)0xD0D0D0);
    g_app.Add(g_pairs_z_bg);
+
+   const int z_label_w = 24;
+   const int z_label_h = 14;
+   const int z_label_x = g_pairs_z_x + 4;
+   const int z_label_y = g_pairs_z_y + 4;
+   if(!g_pairs_z_lbl_p3.Create(0, "pairs_z_lbl_p3", 0, z_label_x, z_label_y, z_label_x + z_label_w, z_label_y + z_label_h))
+      return(false);
+   g_pairs_z_lbl_p3.Text("+3");
+   g_pairs_z_lbl_p3.Color(Z_ORANGE);
+   g_pairs_z_lbl_p3.ColorBackground(clrWhite);
+   g_pairs_z_lbl_p3.ColorBorder(clrWhite);
+   g_pairs_z_lbl_p3.Visible(false);
+   g_app.Add(g_pairs_z_lbl_p3);
+
+   if(!g_pairs_z_lbl_p2.Create(0, "pairs_z_lbl_p2", 0, z_label_x, z_label_y, z_label_x + z_label_w, z_label_y + z_label_h))
+      return(false);
+   g_pairs_z_lbl_p2.Text("+2");
+   g_pairs_z_lbl_p2.Color(Z_RED);
+   g_pairs_z_lbl_p2.ColorBackground(clrWhite);
+   g_pairs_z_lbl_p2.ColorBorder(clrWhite);
+   g_pairs_z_lbl_p2.Visible(false);
+   g_app.Add(g_pairs_z_lbl_p2);
+
+   if(!g_pairs_z_lbl_zero.Create(0, "pairs_z_lbl_zero", 0, z_label_x, z_label_y, z_label_x + z_label_w, z_label_y + z_label_h))
+      return(false);
+   g_pairs_z_lbl_zero.Text("0");
+   g_pairs_z_lbl_zero.Color(Z_GRAY);
+   g_pairs_z_lbl_zero.ColorBackground(clrWhite);
+   g_pairs_z_lbl_zero.ColorBorder(clrWhite);
+   g_pairs_z_lbl_zero.Visible(false);
+   g_app.Add(g_pairs_z_lbl_zero);
+
+   if(!g_pairs_z_lbl_m2.Create(0, "pairs_z_lbl_m2", 0, z_label_x, z_label_y, z_label_x + z_label_w, z_label_y + z_label_h))
+      return(false);
+   g_pairs_z_lbl_m2.Text("-2");
+   g_pairs_z_lbl_m2.Color(Z_RED);
+   g_pairs_z_lbl_m2.ColorBackground(clrWhite);
+   g_pairs_z_lbl_m2.ColorBorder(clrWhite);
+   g_pairs_z_lbl_m2.Visible(false);
+   g_app.Add(g_pairs_z_lbl_m2);
+
+   if(!g_pairs_z_lbl_m3.Create(0, "pairs_z_lbl_m3", 0, z_label_x, z_label_y, z_label_x + z_label_w, z_label_y + z_label_h))
+      return(false);
+   g_pairs_z_lbl_m3.Text("-3");
+   g_pairs_z_lbl_m3.Color(Z_ORANGE);
+   g_pairs_z_lbl_m3.ColorBackground(clrWhite);
+   g_pairs_z_lbl_m3.ColorBorder(clrWhite);
+   g_pairs_z_lbl_m3.Visible(false);
+   g_app.Add(g_pairs_z_lbl_m3);
+
+   if(!g_pairs_z_line_zero.Create(0, "pairs_z_line_zero", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + 1))
+      return(false);
+   g_pairs_z_line_zero.ColorBackground(Z_GRAY);
+   g_pairs_z_line_zero.ColorBorder(Z_GRAY);
+   g_pairs_z_line_zero.Visible(false);
+   g_app.Add(g_pairs_z_line_zero);
+
+   if(!g_pairs_z_line_p2.Create(0, "pairs_z_line_p2", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + 1))
+      return(false);
+   g_pairs_z_line_p2.ColorBackground(Z_RED);
+   g_pairs_z_line_p2.ColorBorder(Z_RED);
+   g_pairs_z_line_p2.Visible(false);
+   g_app.Add(g_pairs_z_line_p2);
+
+   if(!g_pairs_z_line_m2.Create(0, "pairs_z_line_m2", 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + g_pairs_z_w, g_pairs_z_y + 1))
+      return(false);
+   g_pairs_z_line_m2.ColorBackground(Z_RED);
+   g_pairs_z_line_m2.ColorBorder(Z_RED);
+   g_pairs_z_line_m2.Visible(false);
+   g_app.Add(g_pairs_z_line_m2);
+
+   const int dotted_count = 80;
+   ArrayResize(g_pairs_z_dots_p3, dotted_count);
+   ArrayResize(g_pairs_z_dots_m3, dotted_count);
+   for(int i = 0; i < dotted_count; i++)
+     {
+      const string name_p3 = "pairs_z_dot_p3_" + IntegerToString(i);
+      if(!g_pairs_z_dots_p3[i].Create(0, name_p3, 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + 2, g_pairs_z_y + 2))
+         return(false);
+      g_pairs_z_dots_p3[i].ColorBackground(Z_ORANGE);
+      g_pairs_z_dots_p3[i].ColorBorder(Z_ORANGE);
+      g_pairs_z_dots_p3[i].Visible(false);
+      g_app.Add(g_pairs_z_dots_p3[i]);
+
+      const string name_m3 = "pairs_z_dot_m3_" + IntegerToString(i);
+      if(!g_pairs_z_dots_m3[i].Create(0, name_m3, 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + 2, g_pairs_z_y + 2))
+         return(false);
+      g_pairs_z_dots_m3[i].ColorBackground(Z_ORANGE);
+      g_pairs_z_dots_m3[i].ColorBorder(Z_ORANGE);
+      g_pairs_z_dots_m3[i].Visible(false);
+      g_app.Add(g_pairs_z_dots_m3[i]);
+     }
 
    ArrayResize(g_pairs_z_dots, g_pairs_z_max_points);
    for(int i = 0; i < g_pairs_z_max_points; i++)
@@ -1105,7 +1309,7 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
          return(false);
       g_pairs_z_dots[i].Text("");
       g_pairs_z_dots[i].ColorBackground(clrWhite);
-      g_pairs_z_dots[i].ColorBorder((color)0xFF6A00);
+      g_pairs_z_dots[i].ColorBorder(Z_BLUE);
       g_pairs_z_dots[i].ReadOnly(true);
       g_pairs_z_dots[i].Visible(false);
       g_app.Add(g_pairs_z_dots[i]);
@@ -1117,8 +1321,8 @@ bool InitParesTab(const int x, const int y, const int w, const int h)
       const string name = "pairs_z_line_" + IntegerToString(i);
       if(!g_pairs_z_line_dots[i].Create(0, name, 0, g_pairs_z_x, g_pairs_z_y, g_pairs_z_x + 1, g_pairs_z_y + 1))
          return(false);
-      g_pairs_z_line_dots[i].ColorBackground((color)0x0078D7);
-      g_pairs_z_line_dots[i].ColorBorder((color)0x0078D7);
+      g_pairs_z_line_dots[i].ColorBackground(Z_BLUE);
+      g_pairs_z_line_dots[i].ColorBorder(Z_BLUE);
       g_pairs_z_line_dots[i].Visible(false);
       g_app.Add(g_pairs_z_line_dots[i]);
      }
