@@ -57,6 +57,8 @@ bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
    string sym = field.Text();
    StringTrimLeft(sym);
    StringTrimRight(sym);
+   StringToUpper(sym);
+   field.Text(sym);
    if(sym == "")
      {
       price_out.Text("--");
