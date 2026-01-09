@@ -7,7 +7,6 @@
 #include <Controls/Edit.mqh>
 #include <Controls/Button.mqh>
 #include <Trade/Trade.mqh>
-#include <ChartObjects/ChartObjectSubChart.mqh>
 
 input int    InpDeviationPoints = 5;
 input int    InpMagic           = 50101;
@@ -50,8 +49,6 @@ CLabel g_summary_title;
 CLabel g_summary_line1;
 CLabel g_summary_line2;
 CLabel g_summary_line3;
-CChartObjectSubChart g_sell_chart_obj;
-CChartObjectSubChart g_buy_chart_obj;
 
 ulong g_sell_ticket = 0;
 ulong g_buy_ticket = 0;
@@ -60,12 +57,12 @@ CButton g_show_charts_btn;
 CButton g_submit_btn;
 CButton g_clear_btn;
 
-bool g_side_charts_visible = false;
-int g_charts_x1 = 0;
-int g_charts_w = 0;
-int g_chart_h = 0;
-int g_sell_chart_y = 0;
-int g_buy_chart_y = 0;
+bool g_buy_chart_visible = false;
+string g_subwindow_shortname = "BuyWindow";
+string g_subwindow_indicator = "BuySubWindow";
+int g_subwindow_handle = INVALID_HANDLE;
+int g_subwindow_number = -1;
+string g_buy_chart_object = "buy_chart_object";
 
 bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
 {
@@ -122,58 +119,114 @@ string NormalizeSymbol(const string text)
    return(s);
 }
 
-void UpdateMiniCharts()
+void RemoveBuyChartObject()
 {
-   if(!g_side_charts_visible)
-      return;
-   string sell_sym = NormalizeSymbol(g_sell_input.Text());
-   string buy_sym = NormalizeSymbol(g_buy_input.Text());
-   if(sell_sym == "")
-      sell_sym = Symbol();
-   if(buy_sym == "")
-      buy_sym = Symbol();
-
-   g_sell_chart_obj.Symbol(sell_sym);
-   g_buy_chart_obj.Symbol(buy_sym);
-   int period = (int)Period();
-   g_sell_chart_obj.Period(period);
-   g_buy_chart_obj.Period(period);
+   ObjectDelete(0, g_buy_chart_object);
 }
 
-bool CreateMiniCharts()
+bool EnsureBuySubwindow()
 {
-   if(g_side_charts_visible)
+   g_subwindow_number = ChartWindowFind(0, g_subwindow_shortname);
+   if(g_subwindow_number >= 0)
       return(true);
-   if(g_charts_w <= 0 || g_chart_h <= 0)
+
+   g_subwindow_handle = iCustom(_Symbol, _Period, g_subwindow_indicator);
+   if(g_subwindow_handle == INVALID_HANDLE)
+     {
+      Print("Falha ao criar subjanela.");
+      return(false);
+     }
+
+   g_subwindow_number = (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL);
+   if(!ChartIndicatorAdd(0, g_subwindow_number, g_subwindow_handle))
+     {
+      Print("Falha ao adicionar subjanela.");
+      IndicatorRelease(g_subwindow_handle);
+      g_subwindow_handle = INVALID_HANDLE;
+      g_subwindow_number = -1;
+      return(false);
+     }
+
+   g_subwindow_number = ChartWindowFind(0, g_subwindow_shortname);
+   return(g_subwindow_number >= 0);
+}
+
+void RemoveBuySubwindow()
+{
+   int win = ChartWindowFind(0, g_subwindow_shortname);
+   if(win >= 0)
+      ChartIndicatorDelete(0, win, g_subwindow_shortname);
+   if(g_subwindow_handle != INVALID_HANDLE)
+     {
+      IndicatorRelease(g_subwindow_handle);
+      g_subwindow_handle = INVALID_HANDLE;
+     }
+   g_subwindow_number = -1;
+}
+
+bool CreateBuyChartObject(const string sym)
+{
+   string buy_sym = NormalizeSymbol(sym);
+   if(buy_sym == "")
+      return(false);
+   if(!SymbolSelect(buy_sym, true))
+      return(false);
+   if(!EnsureBuySubwindow())
       return(false);
 
-   int sell_x1 = g_charts_x1;
-   int sell_y1 = g_sell_chart_y;
-   int sell_x2 = g_charts_x1 + g_charts_w;
-   int sell_y2 = g_sell_chart_y + g_chart_h;
-   if(!g_sell_chart_obj.Create(0, "sell_chart", 0, sell_x1, sell_y1, sell_x2, sell_y2))
+   int win = ChartWindowFind(0, g_subwindow_shortname);
+   if(win < 0)
       return(false);
-   g_sell_chart_obj.Corner(CORNER_LEFT_UPPER);
-   g_sell_chart_obj.DateScale(true);
-   g_sell_chart_obj.PriceScale(true);
-   g_sell_chart_obj.Background(false);
-   g_sell_chart_obj.Z_Order(5000);
 
-   int buy_x1 = g_charts_x1;
-   int buy_y1 = g_buy_chart_y;
-   int buy_x2 = g_charts_x1 + g_charts_w;
-   int buy_y2 = g_buy_chart_y + g_chart_h;
-   if(!g_buy_chart_obj.Create(0, "buy_chart", 0, buy_x1, buy_y1, buy_x2, buy_y2))
+   ObjectDelete(0, g_buy_chart_object);
+   int width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, win);
+   int height = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, win);
+   if(!ObjectCreate(0, g_buy_chart_object, OBJ_CHART, win, 0, 0))
       return(false);
-   g_buy_chart_obj.Corner(CORNER_LEFT_UPPER);
-   g_buy_chart_obj.DateScale(true);
-   g_buy_chart_obj.PriceScale(true);
-   g_buy_chart_obj.Background(false);
-   g_buy_chart_obj.Z_Order(5000);
 
-   g_side_charts_visible = true;
-   UpdateMiniCharts();
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_XDISTANCE, 0);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_YDISTANCE, 0);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_CHART_SCALE, (int)ChartGetInteger(0, CHART_SCALE, 0));
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_DATE_SCALE, false);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_PRICE_SCALE, true);
+   ObjectSetString(0, g_buy_chart_object, OBJPROP_SYMBOL, buy_sym);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_PERIOD, Period());
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_BACK, false);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_COLOR, clrWhite);
+
+   long subchart_id = ObjectGetInteger(0, g_buy_chart_object, OBJPROP_CHART_ID);
+   if(subchart_id > 0)
+     {
+      ChartSetInteger(subchart_id, CHART_SHOW_PRICE_SCALE, true);
+      ChartSetInteger(subchart_id, CHART_FOREGROUND, true);
+      ChartSetInteger(subchart_id, CHART_SHOW_OHLC, false);
+      ChartSetInteger(subchart_id, CHART_SHOW_TRADE_LEVELS, false);
+      ChartSetInteger(subchart_id, CHART_SHOW_BID_LINE, false);
+      ChartSetInteger(subchart_id, CHART_SHOW_ASK_LINE, false);
+      ChartRedraw(subchart_id);
+     }
+
    return(true);
+}
+
+void ResizeBuyChartObject()
+{
+   int win = ChartWindowFind(0, g_subwindow_shortname);
+   if(win < 0)
+      return;
+   if(ObjectFind(0, g_buy_chart_object) < 0)
+      return;
+
+   int width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, win);
+   int height = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, win);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_XDISTANCE, 0);
+   ObjectSetInteger(0, g_buy_chart_object, OBJPROP_YDISTANCE, 0);
 }
 
 bool ValidateSymbol(const string sym, string &err)
@@ -469,21 +522,6 @@ bool InitBoleta(const int card_w, const int card_h, const int panel_x, const int
    const int label_w = 140;
    const int input_h = 22;
 
-   const int chart_pad = 20;
-   int charts_x1 = panel_x + card_w + chart_pad;
-   int charts_x2 = chart_w - chart_pad;
-   int charts_w = charts_x2 - charts_x1;
-   if(charts_w < 200)
-      charts_w = 200;
-   int chart_gap = 12;
-   int charts_h_total = chart_h - (chart_pad * 2);
-   int chart_h_each = (charts_h_total - chart_gap) / 2;
-   g_charts_x1 = charts_x1;
-   g_charts_w = charts_w;
-   g_chart_h = chart_h_each;
-   g_sell_chart_y = chart_pad;
-   g_buy_chart_y = chart_pad + chart_h_each + chart_gap;
-
    const int card_gap = 12;
    const int asset_card_w = (card_w - 32 - card_gap) / 2;
    const int asset_card_h = 200;
@@ -652,34 +690,35 @@ bool InitBoleta(const int card_w, const int card_h, const int panel_x, const int
 
    y += asset_card_h + 8;
    const int summary_h = 84;
+   const int summary_text_right = right - 10;
    if(!g_summary_card.Create(0, "summary_card", 0, left, y, right, y + summary_h))
       return(false);
    g_summary_card.ColorBackground(clrWhite);
    g_summary_card.ColorBorder(clrSilver);
    g_app.Add(g_summary_card);
 
-   if(!g_summary_title.Create(0, "summary_title", 0, left + 10, y + 6, right - 10, y + 24))
+   if(!g_summary_title.Create(0, "summary_title", 0, left + 10, y + 6, summary_text_right, y + 24))
       return(false);
    g_summary_title.Text("Resumo Long/Short");
    g_summary_title.ColorBackground(clrWhite);
    g_summary_title.ColorBorder(clrWhite);
    g_app.Add(g_summary_title);
 
-   if(!g_summary_line1.Create(0, "summary_line1", 0, left + 10, y + 26, right - 10, y + 44))
+   if(!g_summary_line1.Create(0, "summary_line1", 0, left + 10, y + 26, summary_text_right, y + 44))
       return(false);
    g_summary_line1.Text("Vendeu: --");
    g_summary_line1.ColorBackground(clrWhite);
    g_summary_line1.ColorBorder(clrWhite);
    g_app.Add(g_summary_line1);
 
-   if(!g_summary_line2.Create(0, "summary_line2", 0, left + 10, y + 44, right - 10, y + 62))
+   if(!g_summary_line2.Create(0, "summary_line2", 0, left + 10, y + 44, summary_text_right, y + 62))
       return(false);
    g_summary_line2.Text("Comprou: --");
    g_summary_line2.ColorBackground(clrWhite);
    g_summary_line2.ColorBorder(clrWhite);
    g_app.Add(g_summary_line2);
 
-   if(!g_summary_line3.Create(0, "summary_line3", 0, left + 10, y + 62, right - 10, y + 80))
+   if(!g_summary_line3.Create(0, "summary_line3", 0, left + 10, y + 62, summary_text_right, y + 80))
       return(false);
    g_summary_line3.Text("Recebe/Paga: --");
    g_summary_line3.Color(clrGray);
@@ -691,7 +730,7 @@ bool InitBoleta(const int card_w, const int card_h, const int panel_x, const int
    const int btn_action_w = 120;
    if(!g_show_charts_btn.Create(0, "btn_charts", 0, left, y, left + btn_action_w, y + 26))
       return(false);
-   g_show_charts_btn.Text("Ver graficos");
+   g_show_charts_btn.Text("Ver grafico compra");
    g_app.Add(g_show_charts_btn);
 
    if(!g_submit_btn.Create(0, "btn_submit", 0, right - (btn_action_w * 2 + 8), y, right - btn_action_w - 8, y + 26))
@@ -720,7 +759,6 @@ int OnInit()
 
    ChartSetInteger(0, CHART_SCALEFIX, false);
    ChartSetInteger(0, CHART_MOUSE_SCROLL, false);
-
    if(!g_app.Create(0, "Painel", 0, card_x, card_y, card_x + card_w, card_y + card_h))
       return(INIT_FAILED);
    if(!InitBoleta(card_w, card_h, card_x, card_y, w, h))
@@ -732,32 +770,49 @@ int OnInit()
 
 void OnDeinit(const int reason)
 {
-   if(g_side_charts_visible)
-     {
-      g_sell_chart_obj.Delete();
-      g_buy_chart_obj.Delete();
-     }
+   RemoveBuyChartObject();
+   RemoveBuySubwindow();
    g_app.Destroy(reason);
 }
 
 void OnChartEvent(const int id, const long& l, const double& d, const string& s)
 {
    g_app.ChartEvent(id, l, d, s);
+   if(id == CHARTEVENT_CHART_CHANGE)
+     {
+      if(g_buy_chart_visible)
+        {
+         if(ChartWindowFind(0, g_subwindow_shortname) < 0)
+           {
+            g_buy_chart_visible = false;
+            g_show_charts_btn.Text("Ver grafico compra");
+           }
+         else
+           {
+            ResizeBuyChartObject();
+           }
+        }
+     }
    if(id == CHARTEVENT_OBJECT_ENDEDIT)
      {
       if(s == "sell_input")
         {
          if(UpdateSymbolPrice(g_sell_input, g_sell_price_value, false))
+           {
+            string sell_sym = NormalizeSymbol(g_sell_input.Text());
+            if(sell_sym != "")
+               ChartSetSymbolPeriod(0, sell_sym, (ENUM_TIMEFRAMES)Period());
             UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
+           }
          UpdateSummary();
-         UpdateMiniCharts();
         }
       else if(s == "buy_input")
         {
          if(UpdateSymbolPrice(g_buy_input, g_buy_price_value, true))
             UpdateTotal(g_buy_price_value, g_buy_qty_input, g_buy_total_value);
          UpdateSummary();
-         UpdateMiniCharts();
+         if(g_buy_chart_visible)
+            CreateBuyChartObject(g_buy_input.Text());
         }
       else if(s == "sell_qty_input")
          UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
@@ -778,11 +833,34 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       g_buy_price_value.Text("--");
       g_sell_total_value.Text("--");
       g_buy_total_value.Text("--");
+      g_buy_chart_visible = false;
+      RemoveBuyChartObject();
+      RemoveBuySubwindow();
+      g_show_charts_btn.Text("Ver grafico compra");
       UpdateSummary();
      }
    else if(s == "btn_charts")
      {
-      CreateMiniCharts();
+      if(!g_buy_chart_visible)
+        {
+         if(CreateBuyChartObject(g_buy_input.Text()))
+           {
+            g_buy_chart_visible = true;
+            g_show_charts_btn.Text("Ocultar grafico");
+           }
+         else
+           {
+            g_buy_chart_visible = false;
+            g_show_charts_btn.Text("Ver grafico compra");
+           }
+        }
+      else
+        {
+         g_buy_chart_visible = false;
+         RemoveBuyChartObject();
+         RemoveBuySubwindow();
+         g_show_charts_btn.Text("Ver grafico compra");
+        }
      }
    else if(s == "sell_qty_up")
      {
@@ -809,7 +887,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       SubmitOrders();
      }
 }
-
-
-
-
+
+
+
+
