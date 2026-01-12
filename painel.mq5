@@ -12,6 +12,7 @@ input int    InpDeviationPoints = 5;
 input int    InpMagic           = 50101;
 input string InpComment         = "LongShort";
 input int    InpLotMultiple     = 100;
+input int    InpPanelExtraHeight = 30;
 
 CAppDialog g_app;
 CTrade g_trade;
@@ -52,6 +53,8 @@ CLabel g_summary_line3;
 
 ulong g_sell_ticket = 0;
 ulong g_buy_ticket = 0;
+double g_sell_entry_price = 0.0;
+double g_buy_entry_price = 0.0;
 
 CButton g_show_charts_btn;
 CButton g_submit_btn;
@@ -63,6 +66,18 @@ string g_subwindow_indicator = "BuySubWindow";
 int g_subwindow_handle = INVALID_HANDLE;
 int g_subwindow_number = -1;
 string g_buy_chart_object = "buy_chart_object";
+string g_sell_entry_line = "sell_entry_line";
+string g_sell_current_line = "sell_current_line";
+string g_buy_entry_line = "buy_entry_line";
+string g_buy_current_line = "buy_current_line";
+string g_sell_entry_badge = "sell_entry_badge";
+string g_sell_entry_badge_text = "sell_entry_badge_text";
+string g_sell_current_badge = "sell_current_badge";
+string g_sell_current_badge_text = "sell_current_badge_text";
+string g_buy_entry_badge = "buy_entry_badge";
+string g_buy_entry_badge_text = "buy_entry_badge_text";
+string g_buy_current_badge = "buy_current_badge";
+string g_buy_current_badge_text = "buy_current_badge_text";
 
 bool UpdateSymbolPrice(CEdit &field, CLabel &price_out, const bool is_buy)
 {
@@ -162,6 +177,24 @@ void RemoveBuySubwindow()
       g_subwindow_handle = INVALID_HANDLE;
      }
    g_subwindow_number = -1;
+   ObjectDelete(0, g_buy_current_line);
+   ObjectDelete(0, g_buy_entry_line);
+   ObjectDelete(0, g_buy_entry_badge);
+   ObjectDelete(0, g_buy_entry_badge_text);
+   ObjectDelete(0, g_buy_current_badge);
+   ObjectDelete(0, g_buy_current_badge_text);
+   long buy_chart_id = 0;
+   if(ObjectFind(0, g_buy_chart_object) >= 0)
+      buy_chart_id = ObjectGetInteger(0, g_buy_chart_object, OBJPROP_CHART_ID);
+   if(buy_chart_id > 0)
+     {
+      ObjectDelete(buy_chart_id, g_buy_current_line);
+      ObjectDelete(buy_chart_id, g_buy_entry_line);
+      ObjectDelete(buy_chart_id, g_buy_entry_badge);
+      ObjectDelete(buy_chart_id, g_buy_entry_badge_text);
+      ObjectDelete(buy_chart_id, g_buy_current_badge);
+      ObjectDelete(buy_chart_id, g_buy_current_badge_text);
+     }
 }
 
 bool CreateBuyChartObject(const string sym)
@@ -202,7 +235,7 @@ bool CreateBuyChartObject(const string sym)
    if(subchart_id > 0)
      {
       ChartSetInteger(subchart_id, CHART_SHOW_PRICE_SCALE, true);
-      ChartSetInteger(subchart_id, CHART_FOREGROUND, true);
+      ChartSetInteger(subchart_id, CHART_FOREGROUND, false);
       ChartSetInteger(subchart_id, CHART_SHOW_OHLC, false);
       ChartSetInteger(subchart_id, CHART_SHOW_TRADE_LEVELS, false);
       ChartSetInteger(subchart_id, CHART_SHOW_BID_LINE, false);
@@ -280,16 +313,26 @@ bool ValidateVolume(const string sym, const double volume, string &err)
    return(true);
 }
 
+
+
+bool IsDemoAccount()
+{
+   return(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO);
+}
 bool CheckLiquidity(const string sym, const double volume, const bool is_buy, string &err)
 {
    if(!MarketBookAdd(sym))
      {
+      if(IsDemoAccount())
+         return(true);
       err = "Book indisponivel: " + sym;
       return(false);
      }
    MqlBookInfo book[];
    if(!MarketBookGet(sym, book) || ArraySize(book) == 0)
      {
+      if(IsDemoAccount())
+         return(true);
       err = "Sem book para: " + sym;
       return(false);
      }
@@ -308,6 +351,23 @@ bool CheckLiquidity(const string sym, const double volume, const bool is_buy, st
      }
    return(true);
 }
+
+bool IsOrderCheckAccepted(const MqlTradeCheckResult &check)
+{
+   if(check.retcode == TRADE_RETCODE_DONE ||
+      check.retcode == TRADE_RETCODE_PLACED ||
+      check.retcode == TRADE_RETCODE_DONE_PARTIAL)
+      return(true);
+
+   string comment = check.comment;
+   StringTrimLeft(comment);
+   StringTrimRight(comment);
+   if(check.retcode == 0 && StringCompare(comment, "Done") == 0)
+      return(true);
+
+   return(false);
+}
+
 
 bool CheckOrder(const string sym, const double volume, const bool is_buy, string &err)
 {
@@ -339,9 +399,9 @@ bool CheckOrder(const string sym, const double volume, const bool is_buy, string
       err = "OrderCheck falhou: " + sym;
       return(false);
      }
-   if(check.retcode != TRADE_RETCODE_DONE && check.retcode != TRADE_RETCODE_PLACED)
+   if(!IsOrderCheckAccepted(check))
      {
-      err = "OrderCheck rejeitado: " + check.comment;
+      err = "OrderCheck rejeitado (" + IntegerToString((int)check.retcode) + "): " + check.comment;
       return(false);
      }
    return(true);
@@ -364,6 +424,202 @@ bool SendMarketOrder(const string sym, const double volume, const bool is_buy, u
    return(true);
 }
 
+void SetPriceLine(const long chart_id, const string name, const int window, const double price, const color clr, const string label)
+{
+   if(price <= 0.0)
+     {
+      ObjectDelete(chart_id, name);
+      return;
+     }
+   if(ObjectFind(chart_id, name) < 0)
+      ObjectCreate(chart_id, name, OBJ_HLINE, window, 0, price);
+   ObjectSetDouble(chart_id, name, OBJPROP_PRICE, price);
+   ObjectSetInteger(chart_id, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(chart_id, name, OBJPROP_STYLE, STYLE_SOLID);
+   ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, 2);
+   ObjectSetInteger(chart_id, name, OBJPROP_SELECTABLE, false);
+   ObjectSetString(chart_id, name, OBJPROP_TEXT, label);
+}
+
+string FormatSignedValue(const double value, const int digits)
+{
+   string sign = value >= 0.0 ? "+" : "-";
+   return(sign + DoubleToString(MathAbs(value), digits));
+}
+
+string BuildBadgeText(const string prefix, const double price, const double delta, const double pct, const int digits, const bool show_delta)
+{
+   string text = prefix + " " + DoubleToString(price, digits);
+   if(show_delta)
+      text += " | " + FormatSignedValue(delta, digits) + " (" + FormatSignedValue(pct, 2) + "%)";
+   return(text);
+}
+
+void UpdatePriceBadge(const long chart_id,
+                      const int window,
+                      const double price,
+                      const string text,
+                      const color bg,
+                      const color fg,
+                      const string rect_name,
+                      const string label_name)
+{
+   if(price <= 0.0 || text == "")
+     {
+      ObjectDelete(chart_id, rect_name);
+      ObjectDelete(chart_id, label_name);
+      return;
+     }
+
+   datetime t = iTime(_Symbol, _Period, 0);
+   int x = 0;
+   int y = 0;
+   if(!ChartTimePriceToXY(chart_id, window, t, price, x, y))
+     {
+      ObjectDelete(chart_id, rect_name);
+      ObjectDelete(chart_id, label_name);
+      return;
+     }
+
+   const int badge_w = 220;
+   const int badge_h = 18;
+   const int pad = 6;
+   int chart_w = (int)ChartGetInteger(chart_id, CHART_WIDTH_IN_PIXELS, window);
+   int chart_h = (int)ChartGetInteger(chart_id, CHART_HEIGHT_IN_PIXELS, window);
+   int box_x = chart_w - badge_w - pad;
+   int box_y = y - (badge_h / 2);
+   if(box_x < 0)
+      box_x = 0;
+   if(box_y < 0)
+      box_y = 0;
+   if(box_y + badge_h > chart_h)
+      box_y = chart_h - badge_h;
+
+   if(ObjectFind(chart_id, rect_name) < 0)
+      ObjectCreate(chart_id, rect_name, OBJ_RECTANGLE_LABEL, window, 0, 0);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_XDISTANCE, box_x);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_YDISTANCE, box_y);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_XSIZE, badge_w);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_YSIZE, badge_h);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_COLOR, bg);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_BACK, false);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(chart_id, rect_name, OBJPROP_BGCOLOR, bg);
+
+   if(ObjectFind(chart_id, label_name) < 0)
+      ObjectCreate(chart_id, label_name, OBJ_LABEL, window, 0, 0);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_XDISTANCE, box_x + 6);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_YDISTANCE, box_y + 2);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_COLOR, fg);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_FONTSIZE, 8);
+   ObjectSetString(chart_id, label_name, OBJPROP_TEXT, text);
+   ObjectSetInteger(chart_id, label_name, OBJPROP_SELECTABLE, false);
+}
+
+void RemovePriceLines()
+{
+   ObjectDelete(0, g_sell_entry_line);
+   ObjectDelete(0, g_sell_current_line);
+   ObjectDelete(0, g_sell_entry_badge);
+   ObjectDelete(0, g_sell_entry_badge_text);
+   ObjectDelete(0, g_sell_current_badge);
+   ObjectDelete(0, g_sell_current_badge_text);
+   ObjectDelete(0, g_buy_entry_line);
+   ObjectDelete(0, g_buy_current_line);
+   ObjectDelete(0, g_buy_entry_badge);
+   ObjectDelete(0, g_buy_entry_badge_text);
+   ObjectDelete(0, g_buy_current_badge);
+   ObjectDelete(0, g_buy_current_badge_text);
+   long buy_chart_id = 0;
+   if(ObjectFind(0, g_buy_chart_object) >= 0)
+      buy_chart_id = ObjectGetInteger(0, g_buy_chart_object, OBJPROP_CHART_ID);
+   if(buy_chart_id > 0)
+     {
+      ObjectDelete(buy_chart_id, g_buy_entry_line);
+      ObjectDelete(buy_chart_id, g_buy_current_line);
+      ObjectDelete(buy_chart_id, g_buy_entry_badge);
+      ObjectDelete(buy_chart_id, g_buy_entry_badge_text);
+      ObjectDelete(buy_chart_id, g_buy_current_badge);
+      ObjectDelete(buy_chart_id, g_buy_current_badge_text);
+     }
+}
+
+void UpdatePriceLines()
+{
+   string sell_sym = NormalizeSymbol(g_sell_input.Text());
+   if(sell_sym != "")
+     {
+      SymbolSelect(sell_sym, true);
+      double sell_current = SymbolInfoDouble(sell_sym, SYMBOL_BID);
+      int sell_digits = (int)SymbolInfoInteger(sell_sym, SYMBOL_DIGITS);
+      bool has_sell_entry = (g_sell_entry_price > 0.0);
+      double sell_delta = has_sell_entry ? (sell_current - g_sell_entry_price) : 0.0;
+      double sell_pct = has_sell_entry ? (sell_delta / g_sell_entry_price * 100.0) : 0.0;
+      color sell_badge_bg = has_sell_entry ? (sell_delta >= 0.0 ? clrGreen : clrRed) : clrSilver;
+      SetPriceLine(0, g_sell_current_line, 0, sell_current, clrSilver, "Atual");
+      SetPriceLine(0, g_sell_entry_line, 0, g_sell_entry_price, clrRed, "Entrada");
+      UpdatePriceBadge(0, 0, sell_current,
+                       BuildBadgeText("Atual", sell_current, sell_delta, sell_pct, sell_digits, has_sell_entry),
+                       sell_badge_bg, clrWhite, g_sell_current_badge, g_sell_current_badge_text);
+      UpdatePriceBadge(0, 0, g_sell_entry_price,
+                       has_sell_entry ? BuildBadgeText("Entrada", g_sell_entry_price, sell_delta, sell_pct, sell_digits, true) : "",
+                       sell_badge_bg, clrWhite, g_sell_entry_badge, g_sell_entry_badge_text);
+     }
+   else
+     {
+      ObjectDelete(0, g_sell_current_line);
+      ObjectDelete(0, g_sell_entry_line);
+      ObjectDelete(0, g_sell_entry_badge);
+      ObjectDelete(0, g_sell_entry_badge_text);
+      ObjectDelete(0, g_sell_current_badge);
+      ObjectDelete(0, g_sell_current_badge_text);
+     }
+
+   int buy_win = ChartWindowFind(0, g_subwindow_shortname);
+   long buy_chart_id = 0;
+   if(ObjectFind(0, g_buy_chart_object) >= 0)
+      buy_chart_id = ObjectGetInteger(0, g_buy_chart_object, OBJPROP_CHART_ID);
+   string buy_sym = NormalizeSymbol(g_buy_input.Text());
+   if(buy_sym != "" && buy_chart_id > 0)
+     {
+      SymbolSelect(buy_sym, true);
+      double buy_current = SymbolInfoDouble(buy_sym, SYMBOL_ASK);
+      int buy_digits = (int)SymbolInfoInteger(buy_sym, SYMBOL_DIGITS);
+      bool has_buy_entry = (g_buy_entry_price > 0.0);
+      double buy_delta = has_buy_entry ? (buy_current - g_buy_entry_price) : 0.0;
+      double buy_pct = has_buy_entry ? (buy_delta / g_buy_entry_price * 100.0) : 0.0;
+      color buy_badge_bg = has_buy_entry ? (buy_delta >= 0.0 ? clrGreen : clrRed) : clrSilver;
+      SetPriceLine(buy_chart_id, g_buy_current_line, 0, buy_current, clrSilver, "Atual");
+      SetPriceLine(buy_chart_id, g_buy_entry_line, 0, g_buy_entry_price, clrGreen, "Entrada");
+      UpdatePriceBadge(buy_chart_id, 0, buy_current,
+                       BuildBadgeText("Atual", buy_current, buy_delta, buy_pct, buy_digits, has_buy_entry),
+                       buy_badge_bg, clrWhite, g_buy_current_badge, g_buy_current_badge_text);
+      UpdatePriceBadge(buy_chart_id, 0, g_buy_entry_price,
+                       has_buy_entry ? BuildBadgeText("Entrada", g_buy_entry_price, buy_delta, buy_pct, buy_digits, true) : "",
+                       buy_badge_bg, clrWhite, g_buy_entry_badge, g_buy_entry_badge_text);
+     }
+   else
+     {
+      ObjectDelete(0, g_buy_current_line);
+      ObjectDelete(0, g_buy_entry_line);
+      ObjectDelete(0, g_buy_entry_badge);
+      ObjectDelete(0, g_buy_entry_badge_text);
+      ObjectDelete(0, g_buy_current_badge);
+      ObjectDelete(0, g_buy_current_badge_text);
+      if(buy_chart_id > 0)
+        {
+         ObjectDelete(buy_chart_id, g_buy_current_line);
+         ObjectDelete(buy_chart_id, g_buy_entry_line);
+         ObjectDelete(buy_chart_id, g_buy_entry_badge);
+         ObjectDelete(buy_chart_id, g_buy_entry_badge_text);
+         ObjectDelete(buy_chart_id, g_buy_current_badge);
+         ObjectDelete(buy_chart_id, g_buy_current_badge_text);
+        }
+     }
+}
+
 void SubmitOrders()
 {
    string sell_sym = NormalizeSymbol(g_sell_input.Text());
@@ -383,20 +639,24 @@ void SubmitOrders()
       Print(err);
       return;
      }
-   if(!ValidateVolume(sell_sym, sell_qty, err) || !ValidateVolume(buy_sym, buy_qty, err))
+   bool is_demo = IsDemoAccount();
+   if(!is_demo)
      {
-      Print(err);
-      return;
-     }
-   if(!CheckLiquidity(sell_sym, sell_qty, false, err) || !CheckLiquidity(buy_sym, buy_qty, true, err))
-     {
-      Print(err);
-      return;
-     }
-   if(!CheckOrder(sell_sym, sell_qty, false, err) || !CheckOrder(buy_sym, buy_qty, true, err))
-     {
-      Print(err);
-      return;
+      if(!ValidateVolume(sell_sym, sell_qty, err) || !ValidateVolume(buy_sym, buy_qty, err))
+        {
+         Print(err);
+         return;
+        }
+      if(!CheckLiquidity(sell_sym, sell_qty, false, err) || !CheckLiquidity(buy_sym, buy_qty, true, err))
+        {
+         Print(err);
+         return;
+        }
+      if(!CheckOrder(sell_sym, sell_qty, false, err) || !CheckOrder(buy_sym, buy_qty, true, err))
+        {
+         Print(err);
+         return;
+        }
      }
 
    g_sell_ticket = 0;
@@ -406,11 +666,14 @@ void SubmitOrders()
       Print("Falha venda: " + err);
       return;
      }
+   g_sell_entry_price = g_trade.ResultPrice();
    if(!SendMarketOrder(buy_sym, buy_qty, true, g_buy_ticket, err))
      {
       Print("Falha compra: " + err);
       return;
      }
+   g_buy_entry_price = g_trade.ResultPrice();
+   UpdatePriceLines();
 }
 
 void UpdateTotal(CLabel &price_label, CEdit &qty_field, CLabel &total_out)
@@ -753,7 +1016,10 @@ int OnInit()
    int card_w = MathMin(460, w - (pad * 2));
    if(card_w < 320)
       card_w = 320;
-   const int card_h = h - (pad * 2);
+   int card_h = h - (pad * 2) + InpPanelExtraHeight;
+   int max_h = h - pad;
+   if(card_h > max_h)
+      card_h = max_h;
    int card_x = pad;
    int card_y = pad;
 
@@ -772,7 +1038,13 @@ void OnDeinit(const int reason)
 {
    RemoveBuyChartObject();
    RemoveBuySubwindow();
+   RemovePriceLines();
    g_app.Destroy(reason);
+}
+
+void OnTick()
+{
+   UpdatePriceLines();
 }
 
 void OnChartEvent(const int id, const long& l, const double& d, const string& s)
@@ -792,6 +1064,8 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
             ResizeBuyChartObject();
            }
         }
+      UpdatePriceLines();
+      g_app.BringToTop();
      }
    if(id == CHARTEVENT_OBJECT_ENDEDIT)
      {
@@ -805,6 +1079,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
             UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
            }
          UpdateSummary();
+         UpdatePriceLines();
         }
       else if(s == "buy_input")
         {
@@ -813,6 +1088,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
          UpdateSummary();
          if(g_buy_chart_visible)
             CreateBuyChartObject(g_buy_input.Text());
+         UpdatePriceLines();
         }
       else if(s == "sell_qty_input")
          UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
@@ -833,9 +1109,12 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       g_buy_price_value.Text("--");
       g_sell_total_value.Text("--");
       g_buy_total_value.Text("--");
+      g_sell_entry_price = 0.0;
+      g_buy_entry_price = 0.0;
       g_buy_chart_visible = false;
       RemoveBuyChartObject();
       RemoveBuySubwindow();
+      RemovePriceLines();
       g_show_charts_btn.Text("Ver grafico compra");
       UpdateSummary();
      }
@@ -847,6 +1126,8 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
            {
             g_buy_chart_visible = true;
             g_show_charts_btn.Text("Ocultar grafico");
+            g_app.BringToTop();
+            UpdatePriceLines();
            }
          else
            {
@@ -887,7 +1168,11 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       SubmitOrders();
      }
 }
-
-
-
-
+
+
+
+
+
+
+
+
