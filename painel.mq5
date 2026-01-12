@@ -50,11 +50,17 @@ CLabel g_summary_title;
 CLabel g_summary_line1;
 CLabel g_summary_line2;
 CLabel g_summary_line3;
+CPanel g_evolution_card;
+CLabel g_evolution_title;
+CLabel g_evolution_line1;
+CLabel g_evolution_line2;
+CLabel g_evolution_line3;
 
 ulong g_sell_ticket = 0;
 ulong g_buy_ticket = 0;
 double g_sell_entry_price = 0.0;
 double g_buy_entry_price = 0.0;
+int g_magic = 0;
 
 CButton g_show_charts_btn;
 CButton g_submit_btn;
@@ -319,6 +325,54 @@ bool IsDemoAccount()
 {
    return(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO);
 }
+
+bool IsMagicUsed(const int magic)
+{
+   int pos_total = PositionsTotal();
+   for(int i = 0; i < pos_total; i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket))
+        {
+         if((int)PositionGetInteger(POSITION_MAGIC) == magic)
+            return(true);
+        }
+     }
+   int ord_total = OrdersTotal();
+   for(int i = 0; i < ord_total; i++)
+     {
+      ulong ticket = OrderGetTicket(i);
+      if(OrderSelect(ticket))
+        {
+         if((int)OrderGetInteger(ORDER_MAGIC) == magic)
+            return(true);
+        }
+     }
+   return(false);
+}
+
+int GenerateUniqueMagic()
+{
+   MathSrand((int)GetTickCount());
+   for(int i = 0; i < 1000; i++)
+     {
+      int candidate = 10000 + (MathRand() % 900000000);
+      if(!IsMagicUsed(candidate))
+         return(candidate);
+     }
+   return(10000 + (MathRand() % 900000000));
+}
+
+void InitMagic()
+{
+   if(InpMagic > 0)
+     {
+      g_magic = InpMagic;
+      return;
+     }
+   g_magic = GenerateUniqueMagic();
+   Print("Magic gerado: ", g_magic);
+}
 bool CheckLiquidity(const string sym, const double volume, const bool is_buy, string &err)
 {
    if(!MarketBookAdd(sym))
@@ -391,7 +445,7 @@ bool CheckOrder(const string sym, const double volume, const bool is_buy, string
    req.deviation = InpDeviationPoints;
    req.type_filling = ORDER_FILLING_FOK;
    req.type_time = ORDER_TIME_GTC;
-   req.magic = InpMagic;
+   req.magic = g_magic;
    req.comment = InpComment;
 
    if(!OrderCheck(req, check))
@@ -409,7 +463,7 @@ bool CheckOrder(const string sym, const double volume, const bool is_buy, string
 
 bool SendMarketOrder(const string sym, const double volume, const bool is_buy, ulong &ticket, string &err)
 {
-   g_trade.SetExpertMagicNumber(InpMagic);
+   g_trade.SetExpertMagicNumber(g_magic);
    g_trade.SetDeviationInPoints(InpDeviationPoints);
    g_trade.SetTypeFilling(ORDER_FILLING_FOK);
 
@@ -740,6 +794,93 @@ void UpdateSummary()
      }
 }
 
+void UpdateEvolution()
+{
+   string sell_sym = NormalizeSymbol(g_sell_input.Text());
+   string buy_sym = NormalizeSymbol(g_buy_input.Text());
+
+   int sell_digits = sell_sym == "" ? 2 : (int)SymbolInfoInteger(sell_sym, SYMBOL_DIGITS);
+   int buy_digits = buy_sym == "" ? 2 : (int)SymbolInfoInteger(buy_sym, SYMBOL_DIGITS);
+
+   double sell_current = 0.0;
+   double buy_current = 0.0;
+   if(sell_sym != "")
+     {
+      SymbolSelect(sell_sym, true);
+      sell_current = SymbolInfoDouble(sell_sym, SYMBOL_BID);
+     }
+   if(buy_sym != "")
+     {
+      SymbolSelect(buy_sym, true);
+      buy_current = SymbolInfoDouble(buy_sym, SYMBOL_ASK);
+     }
+
+   double sell_entry = g_sell_entry_price;
+   double buy_entry = g_buy_entry_price;
+   double sell_qty_pos = 0.0;
+   double buy_qty_pos = 0.0;
+   int pos_total = PositionsTotal();
+   for(int i = 0; i < pos_total; i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      string psym = PositionGetString(POSITION_SYMBOL);
+      int pmagic = (int)PositionGetInteger(POSITION_MAGIC);
+      ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double pvol = PositionGetDouble(POSITION_VOLUME);
+      double pprice = PositionGetDouble(POSITION_PRICE_OPEN);
+      if(pmagic != g_magic)
+         continue;
+      if(psym == sell_sym && ptype == POSITION_TYPE_SELL)
+        {
+         sell_entry = (sell_entry * sell_qty_pos + pprice * pvol) / (sell_qty_pos + pvol);
+         sell_qty_pos += pvol;
+        }
+      else if(psym == buy_sym && ptype == POSITION_TYPE_BUY)
+        {
+         buy_entry = (buy_entry * buy_qty_pos + pprice * pvol) / (buy_qty_pos + pvol);
+         buy_qty_pos += pvol;
+        }
+     }
+   if(sell_qty_pos > 0.0)
+      g_sell_entry_price = sell_entry;
+   if(buy_qty_pos > 0.0)
+      g_buy_entry_price = buy_entry;
+
+   string sell_entry_txt = sell_entry > 0.0 ? DoubleToString(sell_entry, sell_digits) : "--";
+   string sell_current_txt = sell_current > 0.0 ? DoubleToString(sell_current, sell_digits) : "--";
+   string buy_entry_txt = buy_entry > 0.0 ? DoubleToString(buy_entry, buy_digits) : "--";
+   string buy_current_txt = buy_current > 0.0 ? DoubleToString(buy_current, buy_digits) : "--";
+
+   if(sell_sym == "")
+      sell_sym = "--";
+   if(buy_sym == "")
+      buy_sym = "--";
+
+   g_evolution_line1.Text("Venda " + sell_sym + " Entrada: " + sell_entry_txt + " | Atual: " + sell_current_txt);
+   g_evolution_line2.Text("Compra " + buy_sym + " Entrada: " + buy_entry_txt + " | Atual: " + buy_current_txt);
+
+   double sell_qty = 0.0;
+   double buy_qty = 0.0;
+   bool has_sell_qty = TryParseDouble(g_sell_qty_input.Text(), sell_qty);
+   bool has_buy_qty = TryParseDouble(g_buy_qty_input.Text(), buy_qty);
+   if(sell_entry > 0.0 && buy_entry > 0.0 && has_sell_qty && has_buy_qty &&
+      sell_current > 0.0 && buy_current > 0.0)
+     {
+      double sell_pnl = (sell_entry - sell_current) * sell_qty;
+      double buy_pnl = (buy_current - buy_entry) * buy_qty;
+      double total = sell_pnl + buy_pnl;
+      g_evolution_line3.Text("Resultado: " + FormatMoney(total, 2));
+      g_evolution_line3.Color(total >= 0.0 ? clrGreen : clrRed);
+     }
+   else
+     {
+      g_evolution_line3.Text("Resultado: --");
+      g_evolution_line3.Color(clrGray);
+     }
+}
+
 void UpdateQtyByDelta(CEdit &qty_field, const double delta)
 {
    double qty = 0.0;
@@ -1005,6 +1146,43 @@ bool InitBoleta(const int card_w, const int card_h, const int panel_x, const int
       return(false);
    g_clear_btn.Text("Limpar");
    g_app.Add(g_clear_btn);
+
+   y += 34;
+   const int evolution_h = 84;
+   if(!g_evolution_card.Create(0, "evolution_card", 0, left, y, right, y + evolution_h))
+      return(false);
+   g_evolution_card.ColorBackground(clrWhite);
+   g_evolution_card.ColorBorder(clrSilver);
+   g_app.Add(g_evolution_card);
+
+   if(!g_evolution_title.Create(0, "evolution_title", 0, left + 10, y + 6, summary_text_right, y + 24))
+      return(false);
+   g_evolution_title.Text("Evolucao da operacao");
+   g_evolution_title.ColorBackground(clrWhite);
+   g_evolution_title.ColorBorder(clrWhite);
+   g_app.Add(g_evolution_title);
+
+   if(!g_evolution_line1.Create(0, "evolution_line1", 0, left + 10, y + 26, summary_text_right, y + 44))
+      return(false);
+   g_evolution_line1.Text("Venda -- Entrada: -- | Atual: --");
+   g_evolution_line1.ColorBackground(clrWhite);
+   g_evolution_line1.ColorBorder(clrWhite);
+   g_app.Add(g_evolution_line1);
+
+   if(!g_evolution_line2.Create(0, "evolution_line2", 0, left + 10, y + 44, summary_text_right, y + 62))
+      return(false);
+   g_evolution_line2.Text("Compra -- Entrada: -- | Atual: --");
+   g_evolution_line2.ColorBackground(clrWhite);
+   g_evolution_line2.ColorBorder(clrWhite);
+   g_app.Add(g_evolution_line2);
+
+   if(!g_evolution_line3.Create(0, "evolution_line3", 0, left + 10, y + 62, summary_text_right, y + 80))
+      return(false);
+   g_evolution_line3.Text("Resultado: --");
+   g_evolution_line3.Color(clrGray);
+   g_evolution_line3.ColorBackground(clrWhite);
+   g_evolution_line3.ColorBorder(clrWhite);
+   g_app.Add(g_evolution_line3);
    return(true);
 }
 
@@ -1025,12 +1203,14 @@ int OnInit()
 
    ChartSetInteger(0, CHART_SCALEFIX, false);
    ChartSetInteger(0, CHART_MOUSE_SCROLL, false);
+   InitMagic();
    if(!g_app.Create(0, "Painel", 0, card_x, card_y, card_x + card_w, card_y + card_h))
       return(INIT_FAILED);
    if(!InitBoleta(card_w, card_h, card_x, card_y, w, h))
       return(INIT_FAILED);
 
    g_app.Run();
+   EventSetTimer(1);
    return(INIT_SUCCEEDED);
 }
 
@@ -1039,12 +1219,20 @@ void OnDeinit(const int reason)
    RemoveBuyChartObject();
    RemoveBuySubwindow();
    RemovePriceLines();
+   EventKillTimer();
    g_app.Destroy(reason);
 }
 
 void OnTick()
 {
    UpdatePriceLines();
+   UpdateEvolution();
+}
+
+void OnTimer()
+{
+   UpdatePriceLines();
+   UpdateEvolution();
 }
 
 void OnChartEvent(const int id, const long& l, const double& d, const string& s)
@@ -1080,6 +1268,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
            }
          UpdateSummary();
          UpdatePriceLines();
+         UpdateEvolution();
         }
       else if(s == "buy_input")
         {
@@ -1089,11 +1278,18 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
          if(g_buy_chart_visible)
             CreateBuyChartObject(g_buy_input.Text());
          UpdatePriceLines();
+         UpdateEvolution();
         }
       else if(s == "sell_qty_input")
+        {
          UpdateTotal(g_sell_price_value, g_sell_qty_input, g_sell_total_value);
+         UpdateEvolution();
+        }
       else if(s == "buy_qty_input")
+        {
          UpdateTotal(g_buy_price_value, g_buy_qty_input, g_buy_total_value);
+         UpdateEvolution();
+        }
       return;
      }
 
@@ -1117,6 +1313,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
       RemovePriceLines();
       g_show_charts_btn.Text("Ver grafico compra");
       UpdateSummary();
+      UpdateEvolution();
      }
    else if(s == "btn_charts")
      {
@@ -1166,6 +1363,7 @@ void OnChartEvent(const int id, const long& l, const double& d, const string& s)
    else if(s == "btn_submit")
      {
       SubmitOrders();
+      UpdateEvolution();
      }
 }
 
